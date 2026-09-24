@@ -1,0 +1,13 @@
+# Local credentials and machine-specific environment files.
+.env
+.env.*
+!.env.example
+
+# Local dependency and build output.
+node_modules/
+dist/
+.DS_Store
+.local/
+.codex/config.toml
+coverage/
+test-results/

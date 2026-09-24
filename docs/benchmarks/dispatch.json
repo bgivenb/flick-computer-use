@@ -1,0 +1,783 @@
+{
+  "testedAt": "2026-09-24T05:06:24.360Z",
+  "machine": {
+    "os": "macOS 26.5.1",
+    "cpu": "Apple M5 Pro",
+    "node": "v26.3.0"
+  },
+  "model": "jev-latest",
+  "sourceHash": "f0f260b488351b2bd6b8402dca84915f525497ee0aa4e8efb6ecd419adfed418",
+  "sourceHashMethod": "SHA-256 of recursively sorted src/ then demo/ paths, NUL separator, and file bytes",
+  "command": "npm run demo:bench",
+  "connection": "dedicated",
+  "headless": true,
+  "minConfidence": 0.35,
+  "timingExcludes": [
+    "connection",
+    "countdown",
+    "fixture reset",
+    "post-run independent verification"
+  ],
+  "reports": [
+    {
+      "trial": 1,
+      "scenario": 0,
+      "task": "Create a task titled \"Prepare the launch brief\" in \"Website launch\", assigned to Maya Chen, with high priority and due date 2026-10-02. Use the supplied notes and enable Notify assignee. Save the task. Then open Reports and save a CSV export with column headers, using the supplied export email.",
+      "status": "succeeded",
+      "passed": true,
+      "checks": {
+        "task.title": true,
+        "task.project": true,
+        "task.owner": true,
+        "task.priority": true,
+        "task.due": true,
+        "task.notes": true,
+        "task.notify": true,
+        "task.count": true,
+        "export.email": true,
+        "export.format": true,
+        "export.headers": true
+      },
+      "hostInterventions": 0,
+      "metrics": {
+        "elapsedMs": 5757,
+        "observeMs": 62,
+        "decisionMs": 4789,
+        "executionMs": 903,
+        "modelCalls": 16,
+        "staleRetries": 0
+      },
+      "events": [
+        {
+          "step": 1,
+          "action": "Click button \"＋ New task\" (f0_e3)",
+          "confidence": 0.99,
+          "durationMs": 102,
+          "effect": "focus moved to textbox \"Task title\" [focused]"
+        },
+        {
+          "step": 2,
+          "action": "Fill textbox \"Task title\" [focused] (f0_e5) using supplied input \"title\"",
+          "confidence": 1,
+          "durationMs": 56,
+          "effect": "the field holds the value"
+        },
+        {
+          "step": 3,
+          "action": "Fill textbox \"Due date\" (f0_e9) using supplied input \"due_date\"",
+          "confidence": 0.55,
+          "durationMs": 56,
+          "effect": "the field holds the value; focus moved to textbox \"Due date\" [focused] with current value \"2026-10-02\""
+        },
+        {
+          "step": 4,
+          "action": "Fill textbox \"Notes\" (f0_e10) using supplied input \"notes\"",
+          "confidence": 0.72,
+          "durationMs": 53,
+          "effect": "the field holds the value; focus moved to textbox \"Notes\" [focused] with current value \"Include the final copy, assets, and launch checklist.\""
+        },
+        {
+          "step": 5,
+          "action": "Select \"Website launch\" in combobox \"Project\" (f0_e6)",
+          "confidence": 0.43,
+          "durationMs": 54,
+          "effect": "its value is now \"Website launch\""
+        },
+        {
+          "step": 6,
+          "action": "Select \"Maya Chen\" in combobox \"Assignee\" (f0_e7)",
+          "confidence": 0.64,
+          "durationMs": 52,
+          "effect": "its value is now \"Maya Chen\""
+        },
+        {
+          "step": 7,
+          "action": "Select \"High\" in combobox \"Priority\" with current value \"Medium\" (f0_e8)",
+          "confidence": 0.91,
+          "durationMs": 53,
+          "effect": "its value is now \"High\""
+        },
+        {
+          "step": 8,
+          "action": "Click checkbox \"Notify assignee\" [unchecked] (f0_e11)",
+          "confidence": 0.81,
+          "durationMs": 76,
+          "effect": "it is now checked; focus moved to checkbox \"Notify assignee\" [focused, checked]"
+        },
+        {
+          "step": 9,
+          "action": "Click button \"Create task\" (f0_e13)",
+          "confidence": 0.98,
+          "durationMs": 82,
+          "effect": "1 controls appeared and 9 disappeared"
+        },
+        {
+          "step": 10,
+          "action": "Click button \"▥ Reports\" (f0_e2)",
+          "confidence": 0.94,
+          "durationMs": 69,
+          "effect": "focus moved to button \"▥ Reports\" [focused]"
+        },
+        {
+          "step": 11,
+          "action": "Fill textbox \"Export email\" (f0_e14) using supplied input \"export_email\"",
+          "confidence": 0.99,
+          "durationMs": 47,
+          "effect": "the field holds the value; focus moved to textbox \"Export email\" [focused] with current value \"launch@example.com\""
+        },
+        {
+          "step": 12,
+          "action": "Select \"CSV\" in combobox \"File format\" with current value \"json\" (f0_e15)",
+          "confidence": 0.97,
+          "durationMs": 44,
+          "effect": "its value is now \"csv\""
+        },
+        {
+          "step": 13,
+          "action": "Click checkbox \"Include column headers\" [unchecked] (f0_e16)",
+          "confidence": 0.94,
+          "durationMs": 79,
+          "effect": "it is now checked; focus moved to checkbox \"Include column headers\" [focused, checked]"
+        },
+        {
+          "step": 14,
+          "action": "Click button \"Save export settings\" (f0_e17)",
+          "confidence": 0.99,
+          "durationMs": 80,
+          "effect": "focus moved to button \"Save export settings\" [focused]"
+        }
+      ]
+    },
+    {
+      "trial": 2,
+      "scenario": 1,
+      "task": "Create a task titled \"Schedule customer interviews\" in \"Customer research\", assigned to Jordan Lee, with medium priority and due date 2026-10-07. Use the supplied notes and enable Notify assignee. Save the task. Then open Reports and save a CSV export with column headers, using the supplied export email.",
+      "status": "succeeded",
+      "passed": true,
+      "checks": {
+        "task.title": true,
+        "task.project": true,
+        "task.owner": true,
+        "task.priority": true,
+        "task.due": true,
+        "task.notes": true,
+        "task.notify": true,
+        "task.count": true,
+        "export.email": true,
+        "export.format": true,
+        "export.headers": true
+      },
+      "hostInterventions": 0,
+      "metrics": {
+        "elapsedMs": 6100,
+        "observeMs": 57,
+        "decisionMs": 5223,
+        "executionMs": 818,
+        "modelCalls": 16,
+        "staleRetries": 0
+      },
+      "events": [
+        {
+          "step": 1,
+          "action": "Click button \"＋ New task\" (f0_e3)",
+          "confidence": 0.99,
+          "durationMs": 88,
+          "effect": "focus moved to textbox \"Task title\" [focused]"
+        },
+        {
+          "step": 2,
+          "action": "Fill textbox \"Task title\" [focused] (f0_e5) using supplied input \"title\"",
+          "confidence": 0.99,
+          "durationMs": 55,
+          "effect": "the field holds the value"
+        },
+        {
+          "step": 3,
+          "action": "Fill textbox \"Due date\" (f0_e9) using supplied input \"due_date\"",
+          "confidence": 0.65,
+          "durationMs": 48,
+          "effect": "the field holds the value; focus moved to textbox \"Due date\" [focused] with current value \"2026-10-07\""
+        },
+        {
+          "step": 4,
+          "action": "Fill textbox \"Notes\" (f0_e10) using supplied input \"notes\"",
+          "confidence": 0.72,
+          "durationMs": 51,
+          "effect": "the field holds the value; focus moved to textbox \"Notes\" [focused] with current value \"Invite five customers and prepare the interview guide.\""
+        },
+        {
+          "step": 5,
+          "action": "Select \"Customer research\" in combobox \"Project\" (f0_e6)",
+          "confidence": 0.65,
+          "durationMs": 49,
+          "effect": "its value is now \"Customer research\""
+        },
+        {
+          "step": 6,
+          "action": "Select \"Jordan Lee\" in combobox \"Assignee\" (f0_e7)",
+          "confidence": 0.51,
+          "durationMs": 47,
+          "effect": "its value is now \"Jordan Lee\""
+        },
+        {
+          "step": 7,
+          "action": "Click checkbox \"Notify assignee\" [unchecked] (f0_e11)",
+          "confidence": 0.79,
+          "durationMs": 83,
+          "effect": "it is now checked; focus moved to checkbox \"Notify assignee\" [focused, checked]"
+        },
+        {
+          "step": 8,
+          "action": "Click button \"Create task\" (f0_e13)",
+          "confidence": 0.94,
+          "durationMs": 59,
+          "effect": "1 controls appeared and 9 disappeared"
+        },
+        {
+          "step": 9,
+          "action": "Click button \"▥ Reports\" (f0_e2)",
+          "confidence": 0.92,
+          "durationMs": 80,
+          "effect": "focus moved to button \"▥ Reports\" [focused]"
+        },
+        {
+          "step": 10,
+          "action": "Fill textbox \"Export email\" (f0_e14) using supplied input \"export_email\"",
+          "confidence": 0.99,
+          "durationMs": 51,
+          "effect": "the field holds the value; focus moved to textbox \"Export email\" [focused] with current value \"research@example.com\""
+        },
+        {
+          "step": 11,
+          "action": "Select \"CSV\" in combobox \"File format\" with current value \"json\" (f0_e15)",
+          "confidence": 0.98,
+          "durationMs": 49,
+          "effect": "its value is now \"csv\""
+        },
+        {
+          "step": 12,
+          "action": "Click checkbox \"Include column headers\" [unchecked] (f0_e16)",
+          "confidence": 0.96,
+          "durationMs": 82,
+          "effect": "it is now checked; focus moved to checkbox \"Include column headers\" [focused, checked]"
+        },
+        {
+          "step": 13,
+          "action": "Click button \"Save export settings\" (f0_e17)",
+          "confidence": 0.98,
+          "durationMs": 76,
+          "effect": "focus moved to button \"Save export settings\" [focused]"
+        }
+      ]
+    },
+    {
+      "trial": 3,
+      "scenario": 2,
+      "task": "Create a task titled \"Review the release notes\" in \"Product updates\", assigned to Alex Rivera, with low priority and due date 2026-10-12. Use the supplied notes and enable Notify assignee. Save the task. Then open Reports and save a CSV export with column headers, using the supplied export email.",
+      "status": "succeeded",
+      "passed": true,
+      "checks": {
+        "task.title": true,
+        "task.project": true,
+        "task.owner": true,
+        "task.priority": true,
+        "task.due": true,
+        "task.notes": true,
+        "task.notify": true,
+        "task.count": true,
+        "export.email": true,
+        "export.format": true,
+        "export.headers": true
+      },
+      "hostInterventions": 0,
+      "metrics": {
+        "elapsedMs": 6059,
+        "observeMs": 64,
+        "decisionMs": 5120,
+        "executionMs": 870,
+        "modelCalls": 15,
+        "staleRetries": 0
+      },
+      "events": [
+        {
+          "step": 1,
+          "action": "Click button \"＋ New task\" (f0_e3)",
+          "confidence": 0.99,
+          "durationMs": 81,
+          "effect": "focus moved to textbox \"Task title\" [focused]"
+        },
+        {
+          "step": 2,
+          "action": "Fill textbox \"Task title\" [focused] (f0_e5) using supplied input \"title\"",
+          "confidence": 1,
+          "durationMs": 49,
+          "effect": "the field holds the value"
+        },
+        {
+          "step": 3,
+          "action": "Fill textbox \"Due date\" (f0_e9) using supplied input \"due_date\"",
+          "confidence": 0.61,
+          "durationMs": 52,
+          "effect": "the field holds the value; focus moved to textbox \"Due date\" [focused] with current value \"2026-10-12\""
+        },
+        {
+          "step": 4,
+          "action": "Fill textbox \"Notes\" (f0_e10) using supplied input \"notes\"",
+          "confidence": 0.66,
+          "durationMs": 53,
+          "effect": "the field holds the value; focus moved to textbox \"Notes\" [focused] with current value \"Check screenshots and confirm the feature descriptions.\""
+        },
+        {
+          "step": 5,
+          "action": "Select \"Product updates\" in combobox \"Project\" (f0_e6)",
+          "confidence": 0.5,
+          "durationMs": 52,
+          "effect": "its value is now \"Product updates\""
+        },
+        {
+          "step": 6,
+          "action": "Select \"Alex Rivera\" in combobox \"Assignee\" (f0_e7)",
+          "confidence": 0.48,
+          "durationMs": 51,
+          "effect": "its value is now \"Alex Rivera\""
+        },
+        {
+          "step": 7,
+          "action": "Select \"Low\" in combobox \"Priority\" with current value \"Medium\" (f0_e8)",
+          "confidence": 0.93,
+          "durationMs": 51,
+          "effect": "its value is now \"Low\""
+        },
+        {
+          "step": 8,
+          "action": "Click checkbox \"Notify assignee\" [unchecked] (f0_e11)",
+          "confidence": 0.83,
+          "durationMs": 76,
+          "effect": "it is now checked; focus moved to checkbox \"Notify assignee\" [focused, checked]"
+        },
+        {
+          "step": 9,
+          "action": "Click button \"Create task\" (f0_e13)",
+          "confidence": 0.98,
+          "durationMs": 68,
+          "effect": "1 controls appeared and 9 disappeared"
+        },
+        {
+          "step": 10,
+          "action": "Click button \"▥ Reports\" (f0_e2)",
+          "confidence": 0.94,
+          "durationMs": 78,
+          "effect": "focus moved to button \"▥ Reports\" [focused]"
+        },
+        {
+          "step": 11,
+          "action": "Fill textbox \"Export email\" (f0_e14) using supplied input \"export_email\"",
+          "confidence": 0.99,
+          "durationMs": 51,
+          "effect": "the field holds the value; focus moved to textbox \"Export email\" [focused] with current value \"product@example.com\""
+        },
+        {
+          "step": 12,
+          "action": "Select \"CSV\" in combobox \"File format\" with current value \"json\" (f0_e15)",
+          "confidence": 0.97,
+          "durationMs": 52,
+          "effect": "its value is now \"csv\""
+        },
+        {
+          "step": 13,
+          "action": "Click checkbox \"Include column headers\" [unchecked] (f0_e16)",
+          "confidence": 0.96,
+          "durationMs": 71,
+          "effect": "it is now checked; focus moved to checkbox \"Include column headers\" [focused, checked]"
+        },
+        {
+          "step": 14,
+          "action": "Click button \"Save export settings\" (f0_e17)",
+          "confidence": 0.99,
+          "durationMs": 85,
+          "effect": "focus moved to button \"Save export settings\" [focused]"
+        }
+      ]
+    },
+    {
+      "trial": 4,
+      "scenario": 0,
+      "task": "Create a task titled \"Prepare the launch brief\" in \"Website launch\", assigned to Maya Chen, with high priority and due date 2026-10-02. Use the supplied notes and enable Notify assignee. Save the task. Then open Reports and save a CSV export with column headers, using the supplied export email.",
+      "status": "succeeded",
+      "passed": true,
+      "checks": {
+        "task.title": true,
+        "task.project": true,
+        "task.owner": true,
+        "task.priority": true,
+        "task.due": true,
+        "task.notes": true,
+        "task.notify": true,
+        "task.count": true,
+        "export.email": true,
+        "export.format": true,
+        "export.headers": true
+      },
+      "hostInterventions": 0,
+      "metrics": {
+        "elapsedMs": 6301,
+        "observeMs": 69,
+        "decisionMs": 5335,
+        "executionMs": 891,
+        "modelCalls": 16,
+        "staleRetries": 0
+      },
+      "events": [
+        {
+          "step": 1,
+          "action": "Click button \"＋ New task\" (f0_e3)",
+          "confidence": 0.99,
+          "durationMs": 73,
+          "effect": "focus moved to textbox \"Task title\" [focused]"
+        },
+        {
+          "step": 2,
+          "action": "Fill textbox \"Task title\" [focused] (f0_e5) using supplied input \"title\"",
+          "confidence": 1,
+          "durationMs": 53,
+          "effect": "the field holds the value"
+        },
+        {
+          "step": 3,
+          "action": "Fill textbox \"Due date\" (f0_e9) using supplied input \"due_date\"",
+          "confidence": 0.64,
+          "durationMs": 52,
+          "effect": "the field holds the value; focus moved to textbox \"Due date\" [focused] with current value \"2026-10-02\""
+        },
+        {
+          "step": 4,
+          "action": "Fill textbox \"Notes\" (f0_e10) using supplied input \"notes\"",
+          "confidence": 0.67,
+          "durationMs": 50,
+          "effect": "the field holds the value; focus moved to textbox \"Notes\" [focused] with current value \"Include the final copy, assets, and launch checklist.\""
+        },
+        {
+          "step": 5,
+          "action": "Select \"Website launch\" in combobox \"Project\" (f0_e6)",
+          "confidence": 0.42,
+          "durationMs": 51,
+          "effect": "its value is now \"Website launch\""
+        },
+        {
+          "step": 6,
+          "action": "Select \"Maya Chen\" in combobox \"Assignee\" (f0_e7)",
+          "confidence": 0.63,
+          "durationMs": 51,
+          "effect": "its value is now \"Maya Chen\""
+        },
+        {
+          "step": 7,
+          "action": "Select \"High\" in combobox \"Priority\" with current value \"Medium\" (f0_e8)",
+          "confidence": 0.92,
+          "durationMs": 51,
+          "effect": "its value is now \"High\""
+        },
+        {
+          "step": 8,
+          "action": "Click checkbox \"Notify assignee\" [unchecked] (f0_e11)",
+          "confidence": 0.85,
+          "durationMs": 84,
+          "effect": "it is now checked; focus moved to checkbox \"Notify assignee\" [focused, checked]"
+        },
+        {
+          "step": 9,
+          "action": "Click button \"Create task\" (f0_e13)",
+          "confidence": 0.98,
+          "durationMs": 81,
+          "effect": "1 controls appeared and 9 disappeared"
+        },
+        {
+          "step": 10,
+          "action": "Click button \"▥ Reports\" (f0_e2)",
+          "confidence": 0.94,
+          "durationMs": 87,
+          "effect": "focus moved to button \"▥ Reports\" [focused]"
+        },
+        {
+          "step": 11,
+          "action": "Fill textbox \"Export email\" (f0_e14) using supplied input \"export_email\"",
+          "confidence": 0.99,
+          "durationMs": 44,
+          "effect": "the field holds the value; focus moved to textbox \"Export email\" [focused] with current value \"launch@example.com\""
+        },
+        {
+          "step": 12,
+          "action": "Select \"CSV\" in combobox \"File format\" with current value \"json\" (f0_e15)",
+          "confidence": 0.97,
+          "durationMs": 49,
+          "effect": "its value is now \"csv\""
+        },
+        {
+          "step": 13,
+          "action": "Click checkbox \"Include column headers\" [unchecked] (f0_e16)",
+          "confidence": 0.95,
+          "durationMs": 81,
+          "effect": "it is now checked; focus moved to checkbox \"Include column headers\" [focused, checked]"
+        },
+        {
+          "step": 14,
+          "action": "Click button \"Save export settings\" (f0_e17)",
+          "confidence": 0.99,
+          "durationMs": 84,
+          "effect": "focus moved to button \"Save export settings\" [focused]"
+        }
+      ]
+    },
+    {
+      "trial": 5,
+      "scenario": 1,
+      "task": "Create a task titled \"Schedule customer interviews\" in \"Customer research\", assigned to Jordan Lee, with medium priority and due date 2026-10-07. Use the supplied notes and enable Notify assignee. Save the task. Then open Reports and save a CSV export with column headers, using the supplied export email.",
+      "status": "succeeded",
+      "passed": true,
+      "checks": {
+        "task.title": true,
+        "task.project": true,
+        "task.owner": true,
+        "task.priority": true,
+        "task.due": true,
+        "task.notes": true,
+        "task.notify": true,
+        "task.count": true,
+        "export.email": true,
+        "export.format": true,
+        "export.headers": true
+      },
+      "hostInterventions": 0,
+      "metrics": {
+        "elapsedMs": 6093,
+        "observeMs": 64,
+        "decisionMs": 5218,
+        "executionMs": 807,
+        "modelCalls": 16,
+        "staleRetries": 0
+      },
+      "events": [
+        {
+          "step": 1,
+          "action": "Click button \"＋ New task\" (f0_e3)",
+          "confidence": 0.99,
+          "durationMs": 64,
+          "effect": "focus moved to textbox \"Task title\" [focused]"
+        },
+        {
+          "step": 2,
+          "action": "Fill textbox \"Task title\" [focused] (f0_e5) using supplied input \"title\"",
+          "confidence": 1,
+          "durationMs": 54,
+          "effect": "the field holds the value"
+        },
+        {
+          "step": 3,
+          "action": "Fill textbox \"Due date\" (f0_e9) using supplied input \"due_date\"",
+          "confidence": 0.65,
+          "durationMs": 49,
+          "effect": "the field holds the value; focus moved to textbox \"Due date\" [focused] with current value \"2026-10-07\""
+        },
+        {
+          "step": 4,
+          "action": "Fill textbox \"Notes\" (f0_e10) using supplied input \"notes\"",
+          "confidence": 0.58,
+          "durationMs": 53,
+          "effect": "the field holds the value; focus moved to textbox \"Notes\" [focused] with current value \"Invite five customers and prepare the interview guide.\""
+        },
+        {
+          "step": 5,
+          "action": "Select \"Customer research\" in combobox \"Project\" (f0_e6)",
+          "confidence": 0.7,
+          "durationMs": 53,
+          "effect": "its value is now \"Customer research\""
+        },
+        {
+          "step": 6,
+          "action": "Select \"Jordan Lee\" in combobox \"Assignee\" (f0_e7)",
+          "confidence": 0.5,
+          "durationMs": 53,
+          "effect": "its value is now \"Jordan Lee\""
+        },
+        {
+          "step": 7,
+          "action": "Click checkbox \"Notify assignee\" [unchecked] (f0_e11)",
+          "confidence": 0.82,
+          "durationMs": 77,
+          "effect": "it is now checked; focus moved to checkbox \"Notify assignee\" [focused, checked]"
+        },
+        {
+          "step": 8,
+          "action": "Click button \"Create task\" (f0_e13)",
+          "confidence": 0.95,
+          "durationMs": 85,
+          "effect": "1 controls appeared and 9 disappeared"
+        },
+        {
+          "step": 9,
+          "action": "Click button \"▥ Reports\" (f0_e2)",
+          "confidence": 0.93,
+          "durationMs": 73,
+          "effect": "focus moved to button \"▥ Reports\" [focused]"
+        },
+        {
+          "step": 10,
+          "action": "Fill textbox \"Export email\" (f0_e14) using supplied input \"export_email\"",
+          "confidence": 0.99,
+          "durationMs": 50,
+          "effect": "the field holds the value; focus moved to textbox \"Export email\" [focused] with current value \"research@example.com\""
+        },
+        {
+          "step": 11,
+          "action": "Select \"CSV\" in combobox \"File format\" with current value \"json\" (f0_e15)",
+          "confidence": 0.97,
+          "durationMs": 46,
+          "effect": "its value is now \"csv\""
+        },
+        {
+          "step": 12,
+          "action": "Click checkbox \"Include column headers\" [unchecked] (f0_e16)",
+          "confidence": 0.96,
+          "durationMs": 75,
+          "effect": "it is now checked; focus moved to checkbox \"Include column headers\" [focused, checked]"
+        },
+        {
+          "step": 13,
+          "action": "Click button \"Save export settings\" (f0_e17)",
+          "confidence": 0.98,
+          "durationMs": 75,
+          "effect": "focus moved to button \"Save export settings\" [focused]"
+        }
+      ]
+    },
+    {
+      "trial": 6,
+      "scenario": 2,
+      "task": "Create a task titled \"Review the release notes\" in \"Product updates\", assigned to Alex Rivera, with low priority and due date 2026-10-12. Use the supplied notes and enable Notify assignee. Save the task. Then open Reports and save a CSV export with column headers, using the supplied export email.",
+      "status": "succeeded",
+      "passed": true,
+      "checks": {
+        "task.title": true,
+        "task.project": true,
+        "task.owner": true,
+        "task.priority": true,
+        "task.due": true,
+        "task.notes": true,
+        "task.notify": true,
+        "task.count": true,
+        "export.email": true,
+        "export.format": true,
+        "export.headers": true
+      },
+      "hostInterventions": 0,
+      "metrics": {
+        "elapsedMs": 6428,
+        "observeMs": 53,
+        "decisionMs": 5523,
+        "executionMs": 850,
+        "modelCalls": 15,
+        "staleRetries": 0
+      },
+      "events": [
+        {
+          "step": 1,
+          "action": "Click button \"＋ New task\" (f0_e3)",
+          "confidence": 0.99,
+          "durationMs": 74,
+          "effect": "focus moved to textbox \"Task title\" [focused]"
+        },
+        {
+          "step": 2,
+          "action": "Fill textbox \"Task title\" [focused] (f0_e5) using supplied input \"title\"",
+          "confidence": 1,
+          "durationMs": 51,
+          "effect": "the field holds the value"
+        },
+        {
+          "step": 3,
+          "action": "Fill textbox \"Due date\" (f0_e9) using supplied input \"due_date\"",
+          "confidence": 0.66,
+          "durationMs": 51,
+          "effect": "the field holds the value; focus moved to textbox \"Due date\" [focused] with current value \"2026-10-12\""
+        },
+        {
+          "step": 4,
+          "action": "Fill textbox \"Notes\" (f0_e10) using supplied input \"notes\"",
+          "confidence": 0.74,
+          "durationMs": 56,
+          "effect": "the field holds the value; focus moved to textbox \"Notes\" [focused] with current value \"Check screenshots and confirm the feature descriptions.\""
+        },
+        {
+          "step": 5,
+          "action": "Select \"Product updates\" in combobox \"Project\" (f0_e6)",
+          "confidence": 0.51,
+          "durationMs": 53,
+          "effect": "its value is now \"Product updates\""
+        },
+        {
+          "step": 6,
+          "action": "Select \"Alex Rivera\" in combobox \"Assignee\" (f0_e7)",
+          "confidence": 0.45,
+          "durationMs": 52,
+          "effect": "its value is now \"Alex Rivera\""
+        },
+        {
+          "step": 7,
+          "action": "Select \"Low\" in combobox \"Priority\" with current value \"Medium\" (f0_e8)",
+          "confidence": 0.93,
+          "durationMs": 51,
+          "effect": "its value is now \"Low\""
+        },
+        {
+          "step": 8,
+          "action": "Click checkbox \"Notify assignee\" [unchecked] (f0_e11)",
+          "confidence": 0.8,
+          "durationMs": 62,
+          "effect": "it is now checked; focus moved to checkbox \"Notify assignee\" [focused, checked]"
+        },
+        {
+          "step": 9,
+          "action": "Click button \"Create task\" (f0_e13)",
+          "confidence": 0.99,
+          "durationMs": 85,
+          "effect": "1 controls appeared and 9 disappeared"
+        },
+        {
+          "step": 10,
+          "action": "Click button \"▥ Reports\" (f0_e2)",
+          "confidence": 0.94,
+          "durationMs": 80,
+          "effect": "focus moved to button \"▥ Reports\" [focused]"
+        },
+        {
+          "step": 11,
+          "action": "Fill textbox \"Export email\" (f0_e14) using supplied input \"export_email\"",
+          "confidence": 0.99,
+          "durationMs": 44,
+          "effect": "the field holds the value; focus moved to textbox \"Export email\" [focused] with current value \"product@example.com\""
+        },
+        {
+          "step": 12,
+          "action": "Select \"CSV\" in combobox \"File format\" with current value \"json\" (f0_e15)",
+          "confidence": 0.98,
+          "durationMs": 45,
+          "effect": "its value is now \"csv\""
+        },
+        {
+          "step": 13,
+          "action": "Click checkbox \"Include column headers\" [unchecked] (f0_e16)",
+          "confidence": 0.96,
+          "durationMs": 67,
+          "effect": "it is now checked; focus moved to checkbox \"Include column headers\" [focused, checked]"
+        },
+        {
+          "step": 14,
+          "action": "Click button \"Save export settings\" (f0_e17)",
+          "confidence": 0.99,
+          "durationMs": 79,
+          "effect": "focus moved to button \"Save export settings\" [focused]"
+        }
+      ]
+    }
+  ]
+}

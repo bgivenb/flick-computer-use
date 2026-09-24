@@ -1,0 +1,55 @@
+{
+  "name": "flick-computer-use",
+  "version": "0.1.0",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "description": "Fast browser and macOS computer use for MCP agents, powered by TypeSafe Jev",
+  "bin": {
+    "flick": "dist/cli.js",
+    "jev-local-mcp": "dist/cli.js"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "tsc",
+    "build:native": "node scripts/build-native.mjs",
+    "start": "node dist/cli.js",
+    "dev": "tsx src/cli.ts",
+    "check": "tsc --noEmit",
+    "test": "tsx --test tests/*.test.ts",
+    "test:live": "tsx scripts/live-smoke.ts",
+    "test:native": "tsx scripts/native-smoke.ts",
+    "test:ocr": "tsx scripts/ocr-smoke.ts",
+    "test:menu": "tsx scripts/menu-smoke.ts",
+    "test:goal": "tsx scripts/goal-smoke.ts",
+    "doctor": "tsx src/cli.ts doctor",
+    "install:codex": "node scripts/install-codex.mjs",
+    "demo": "tsx scripts/demo.ts",
+    "demo:run": "tsx scripts/demo-run.ts",
+    "demo:bench": "tsx scripts/demo-run.ts --headless --runs=6",
+    "demo:record": "tsx scripts/demo-run.ts --record --countdown=4",
+    "setup": "node scripts/setup-agent.mjs",
+    "setup:agent": "node scripts/setup-agent.mjs",
+    "mcp:config": "node scripts/mcp-config.mjs"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "playwright": "^1.63.0",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.2",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/bgivenb/flick-computer-use.git"
+  },
+  "homepage": "https://github.com/bgivenb/flick-computer-use#readme",
+  "bugs": {
+    "url": "https://github.com/bgivenb/flick-computer-use/issues"
+  }
+}
