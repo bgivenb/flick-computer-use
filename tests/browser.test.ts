@@ -8,8 +8,9 @@ import { fixture } from './fixture.js';
 import { BrowserDriver } from '../src/drivers/browser.js';
 import { StaleObservationError } from '../src/core/types.js';
 
-test('real browser: form flow, stale observation rejection, and independent saved state', async () => {
+test('real browser: form flow, stale observation rejection, and independent saved state', async t => {
   const web = await fixture(); const dir = await mkdtemp(join(tmpdir(), 'jev-test-'));
+  t.after(async () => { await web.close(); await rm(dir, { recursive: true, force: true }); });
   const driver = await BrowserDriver.open({ url: web.url, headless: true }, dir);
   try {
     let observation = await driver.observe();
@@ -31,10 +32,11 @@ test('real browser: form flow, stale observation rejection, and independent save
     assert.deepEqual(web.state(), { email: 'demo@example.com', format: 'csv', headers: true });
     assert.match(observation.text, /Export settings saved/);
     assert.ok((await driver.screenshot()).length > 1000);
-  } finally { await driver.close(); await web.close(); await rm(dir, { recursive: true, force: true }); }
+  } finally { await driver.close(); }
 });
-test('real browser: a live-updating page does not invalidate an unchanged target, and a fill can submit', async () => {
+test('real browser: a live-updating page does not invalidate an unchanged target, and a fill can submit', async t => {
   const web = await fixture(); const dir = await mkdtemp(join(tmpdir(), 'jev-test-'));
+  t.after(async () => { await web.close(); await rm(dir, { recursive: true, force: true }); });
   const driver = await BrowserDriver.open({ url: web.url + '/live', headless: true }, dir);
   const signal = new AbortController().signal;
   try {
@@ -48,10 +50,11 @@ test('real browser: a live-updating page does not invalidate an unchanged target
     await delay(100);
     await driver.act({ kind: 'click', elementId: submitted.elements.find(e => e.role === 'button' && e.name === 'Search')!.id }, submitted, signal);
     assert.match((await driver.observe()).text, /Searched Elvis Presley/);
-  } finally { await driver.close(); await web.close(); await rm(dir, { recursive: true, force: true }); }
+  } finally { await driver.close(); }
 });
-test('real browser: shadow roots, frames, hidden inputs, and password redaction', async () => {
+test('real browser: shadow roots, frames, hidden inputs, and password redaction', async t => {
   const web = await fixture(); const dir = await mkdtemp(join(tmpdir(), 'jev-test-'));
+  t.after(async () => { await web.close(); await rm(dir, { recursive: true, force: true }); });
   const driver = await BrowserDriver.open({ url: web.url + '/edges', headless: true }, dir);
   try {
     const o = await driver.observe();
@@ -67,5 +70,5 @@ test('real browser: shadow roots, frames, hidden inputs, and password redaction'
     const controller = new AbortController(); controller.abort();
     await assert.rejects(driver.act({ kind: 'fill', elementId: o.elements.find(e => e.name === 'Visible input')!.id, value: 'no' }, o, controller.signal));
     assert.equal((await driver.observe()).elements.find(e => e.name === 'Visible input')?.value, '');
-  } finally { await driver.close(); await web.close(); await rm(dir, { recursive: true, force: true }); }
+  } finally { await driver.close(); }
 });

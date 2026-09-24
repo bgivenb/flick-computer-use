@@ -5,21 +5,36 @@ permissions:
 jobs:
   browser-and-core:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
       - run: npm ci
       - run: npm run build
       - run: npx playwright install --with-deps chromium
+      - name: Allow Chromium's sandbox on the Ubuntu runner
+        run: |
+          # Scope Ubuntu's user-namespace exception to Playwright's browser binaries.
+          # https://chromium.googlesource.com/chromium/src/+/main/docs/security/apparmor-userns-restrictions.md
+          cat <<EOF | sudo tee /etc/apparmor.d/flick-playwright > /dev/null
+          abi <abi/4.0>,
+          include <tunables/global>
+          profile flick-playwright "${HOME}/.cache/ms-playwright/**/chrome{,-headless-shell}" flags=(unconfined) {
+            userns,
+          }
+          EOF
+          sudo apparmor_parser -r /etc/apparmor.d/flick-playwright
       - run: npm test
+        timeout-minutes: 2
   native-build:
     runs-on: macos-latest
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm

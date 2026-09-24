@@ -16,6 +16,8 @@ node scripts/setup-agent.mjs
 
 For native macOS tasks, use `node scripts/setup-agent.mjs --native`. This additionally requires Xcode Command Line Tools. Browser DOM control does not require native permissions. The setup command preserves an existing `.env.local` and creates an empty one only when missing.
 
+On Ubuntu 23.10+, bundled Chromium may need an AppArmor profile allowing its sandbox to create user namespaces. Follow [Chromium's environment setup](https://chromium.googlesource.com/chromium/src/+/main/docs/security/apparmor-userns-restrictions.md). The Linux CI workflow contains a profile scoped to Playwright's browser binaries; local setup leaves the machine's AppArmor configuration to its owner.
+
 ## 2. Configure the TypeSafe key
 
 Reuse the user's existing TypeSafe key if they have provided one for this purpose. Otherwise direct them to the [TypeSafe dashboard](https://console.typesafe.ai/) to create a key. Store it as `TYPESAFE_API_KEY` in the clone's `.env.local`, or use the MCP client's secret environment facility. The model defaults to `jev-latest`.
