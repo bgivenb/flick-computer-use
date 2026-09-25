@@ -26,6 +26,12 @@ export async function fixture() {
       response.setHeader('Content-Type', 'text/html');
       response.end(`<!doctype html><title>Edge cases</title><label>Visible input<input id="visible"></label><input aria-label="Hidden input" hidden><input type="password" aria-label="Password" value="do-not-expose"><div id="shadow"></div><iframe src="/frame"></iframe><img alt="Test illustration" width="160" height="100" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='100'%3E%3Crect width='160' height='100' fill='blue'/%3E%3C/svg%3E"><script>document.getElementById('shadow').attachShadow({mode:'open'}).innerHTML='<button>Shadow action</button>'</script>`);
     } else if (request.url === '/frame') { response.setHeader('Content-Type', 'text/html'); response.end('<button>Frame action</button>'); }
+    else if (request.url === '/clipped') {
+      response.setHeader('Content-Type', 'text/html');
+      response.end(`<!doctype html><title>Clipped link</title><style>
+      .skip { position:absolute; top:10px; left:10px; padding:12px; clip:rect(1px,1px,1px,1px); }
+      </style><a class="skip" href="#main">Skip to main content</a><main id="main"><button>Open results</button></main>`);
+    }
     else if (request.url === '/live') {
       response.setHeader('Content-Type', 'text/html');
       response.end(`<!doctype html><title>Live results</title><p id="clock">0</p><label>Search <input id="q"></label><button id="go">Search</button><p id="status"></p><script>

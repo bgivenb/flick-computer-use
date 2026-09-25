@@ -72,3 +72,13 @@ test('real browser: shadow roots, frames, hidden inputs, and password redaction'
     assert.equal((await driver.observe()).elements.find(e => e.name === 'Visible input')?.value, '');
   } finally { await driver.close(); }
 });
+test('real browser: clipped skip link is not offered as a clickable control', async t => {
+  const web = await fixture(); const dir = await mkdtemp(join(tmpdir(), 'jev-test-'));
+  t.after(async () => { await web.close(); await rm(dir, { recursive: true, force: true }); });
+  const driver = await BrowserDriver.open({ url: web.url + '/clipped', headless: true }, dir);
+  try {
+    const observation = await driver.observe();
+    assert.equal(observation.elements.find(e => e.name === 'Skip to main content')?.actions.includes('click'), false);
+    assert.equal(observation.elements.find(e => e.name === 'Open results')?.actions.includes('click'), true);
+  } finally { await driver.close(); }
+});

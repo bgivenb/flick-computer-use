@@ -10,6 +10,19 @@ export const snapshotScript = String.raw`(() => {
       && style.opacity !== '0' && rect.bottom > 0 && rect.right > 0 && rect.top < innerHeight && rect.left < innerWidth
       && !node.closest('[inert],[aria-hidden="true"]');
   };
+  // A control may have a normal rectangle while CSS clips or another element covers every
+  // clickable point. Google search's unfocused "Skip to main content" link is one example.
+  const pointerReachable = node => {
+    const rect = node.getBoundingClientRect();
+    const points = [[.5,.5],[.2,.2],[.8,.2],[.2,.8],[.8,.8]];
+    const root = node.getRootNode();
+    return points.some(([px, py]) => {
+      const x = rect.left + rect.width * px, y = rect.top + rect.height * py;
+      if (x < 0 || y < 0 || x >= innerWidth || y >= innerHeight) return false;
+      const hit = root.elementFromPoint?.(x, y) || document.elementFromPoint(x, y);
+      return hit === node || node.contains(hit);
+    });
+  };
   const roots = [document];
   const all = [];
   for (let index = 0; index < roots.length; index++) {
@@ -43,7 +56,7 @@ export const snapshotScript = String.raw`(() => {
     const name = tidy(node.getAttribute('aria-label') || labelled || labelText || node.getAttribute('alt') || node.getAttribute('placeholder') || node.getAttribute('title') || (node.tagName === 'INPUT' && ['submit','button'].includes(node.type) ? node.value : '') || (node.tagName === 'SELECT' ? node.getAttribute('name') : node.innerText) || node.querySelector('img[alt]')?.alt || node.getAttribute('name') || role);
     const disabled = Boolean(node.disabled || node.getAttribute('aria-disabled') === 'true');
     const actions = [];
-    if (canClick && !isSecret && node.tagName !== 'SELECT') actions.push('click');
+    if (canClick && !isSecret && node.tagName !== 'SELECT' && pointerReachable(node)) actions.push('click');
     if (isEditable && !isSecret) actions.push('fill');
     if (node.tagName === 'SELECT') actions.push('select');
     const container = node.closest('fieldset,[role="dialog"],[role="row"],tr,section,form');

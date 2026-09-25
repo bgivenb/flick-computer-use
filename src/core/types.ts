@@ -87,6 +87,11 @@ export interface Driver {
 export class StaleObservationError extends Error {
   constructor() { super('The interface changed before execution. Observe again.'); }
 }
+// A UI action can fail without ending the goal. The runner re-observes and lets Jev choose again.
+// Keep the message independent of Playwright's raw error, which can contain typed values.
+export class RecoverableActionError extends Error {
+  constructor(readonly reason: string, readonly guidance: string) { super(`Browser action failed: ${reason}.`); }
+}
 export class BlockedError extends Error {}
 // description names the whole action for logs; label names only its target for a Choice option.
 export type Candidate = { action: Action | 'blocked' | 'done'; description: string; label?: string };

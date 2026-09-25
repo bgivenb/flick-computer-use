@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { setTimeout as delay } from 'node:timers/promises';
 import { TaskRunner } from '../src/core/runner.js';
-import { taskSchema, type Driver, type Observation, type Decider, StaleObservationError, candidatesFor, verify } from '../src/core/types.js';
+import { taskSchema, type Driver, type Observation, type Decider, RecoverableActionError, StaleObservationError, candidatesFor, verify } from '../src/core/types.js';
 
 // churn: every observation differs (text, revision) while the task state does not, like a live results page.
 function environment(decider: Decider, options: { stale?: boolean; alreadyDone?: boolean; mutate?: boolean; churn?: boolean; challenge?: boolean } = {}) {
@@ -62,6 +62,54 @@ test('stale decisions are discarded and re-observed', async () => {
   const e = environment(click, { stale: true });
   const result = await e.runner.wait(e.runner.start(e.driver, e.input).id, 1000);
   assert.equal(result.status, 'succeeded'); assert.equal(e.clicks(), 1); assert.equal(result.metrics.staleRetries, 1);
+});
+test('a failed browser action gives Jev its reason and a fresh alternative', async () => {
+  let saved = false, badAttempts = 0;
+  const histories: string[][] = [];
+  const driver: Driver = { id: 's', kind: 'browser', label: 'test',
+    observe: async () => ({ id: 'o', revision: saved ? 'saved' : 'ready', sessionId: 's', kind: 'browser', title: 'Fixture',
+      text: saved ? 'Saved' : 'Ready', capturedAt: Date.now(), truncated: false,
+      elements: ['bad', 'good'].map(id => ({ id, role: 'button', name: id, disabled: false, actions: ['click'] })) }),
+    act: async action => {
+      if ('elementId' in action && action.elementId === 'bad') { badAttempts++; throw new RecoverableActionError('another element covered the target', 'Choose another visible route.'); }
+      saved = true;
+    },
+    screenshot: async () => Buffer.alloc(0), close: async () => {} };
+  const decider: Decider = { decide: async (_input, _observation, candidates, history) => {
+    histories.push([...history]);
+    return { choice: candidates['click:bad'] ? 'click:bad' : 'click:good', confidence: .99, probability: .99, latencyMs: 1 };
+  } };
+  const runner = new TaskRunner(decider);
+  const input = taskSchema.parse({ sessionId: 's', goal: 'Save', until: [{ kind: 'text', text: 'Saved' }] });
+  const result = await runner.wait(runner.start(driver, input).id, 1000);
+  assert.equal(result.status, 'succeeded', result.reason);
+  assert.equal(badAttempts, 1);
+  assert.equal(result.metrics.actionRecoveries, 1);
+  assert.match(histories[1].join(' '), /another element covered the target.*Choose another visible route/);
+  assert.match(result.events[0].effect ?? '', /Browser action failed/);
+});
+test('Jev may retry a transient failure after choosing to wait', async () => {
+  let attempts = 0, done = false;
+  const driver: Driver = { id: 's', kind: 'browser', label: 'test',
+    observe: async () => ({ id: 'o', revision: 'same', sessionId: 's', kind: 'browser', title: 'Fixture',
+      text: done ? 'Saved' : 'Ready', capturedAt: Date.now(), truncated: false,
+      elements: [{ id: 'save', role: 'button', name: 'Save', disabled: false, actions: ['click'] }] }),
+    act: async action => {
+      if (action.kind !== 'click') return;
+      if (++attempts === 1) throw new RecoverableActionError('the target did not become actionable in time', 'Wait for loading or choose another control.');
+      done = true;
+    },
+    screenshot: async () => Buffer.alloc(0), close: async () => {} };
+  const decider: Decider = { decide: async (_input, _observation, candidates) => ({
+    choice: candidates['click:save'] ? 'click:save' : 'wait', confidence: .99, probability: .99, latencyMs: 1,
+  }) };
+  const runner = new TaskRunner(decider);
+  const input = taskSchema.parse({ sessionId: 's', goal: 'Save', until: [{ kind: 'text', text: 'Saved' }] });
+  const result = await runner.wait(runner.start(driver, input).id, 1000);
+  assert.equal(result.status, 'succeeded', result.reason);
+  assert.equal(attempts, 2);
+  assert.equal(result.metrics.actionRecoveries, 1);
+  assert.deepEqual(result.events.map(event => event.action.startsWith('Click') ? 'click' : 'wait'), ['click', 'wait', 'click']);
 });
 test('a task stops instead of repeatedly clicking an unchanged interface', async () => {
   const e = environment(click, { mutate: false });

@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { performance } from 'node:perf_hooks';
 import { setTimeout as delay } from 'node:timers/promises';
-import { BlockedError, candidatesFor, StaleObservationError, verify, type Action, type Condition, type Decider, type DecisionTrace, type Driver, type Observation, type TaskInput } from './types.js';
+import { BlockedError, candidatesFor, RecoverableActionError, StaleObservationError, verify, type Action, type Condition, type Decider, type DecisionTrace, type Driver, type Observation, type TaskInput } from './types.js';
 import { describeCondition, describeEffect, focusView, progressDigest } from './scene.js';
 
 export type Status = 'running' | 'succeeded' | 'blocked' | 'failed' | 'cancelled' | 'timed_out';
@@ -10,7 +10,7 @@ export interface Task {
   steps: number; reason?: string; verification?: ReturnType<typeof verify>;
   request: { goal: string; until: Condition[]; inputNames: string[] };
   lastDecision?: { action: string; confidence: number; probability: number };
-  metrics: { elapsedMs: number; observeMs: number; decisionMs: number; executionMs: number; modelCalls: number; staleRetries: number };
+  metrics: { elapsedMs: number; observeMs: number; decisionMs: number; executionMs: number; modelCalls: number; staleRetries: number; actionRecoveries: number };
   events: Array<{ step: number; action: string; confidence?: number; durationMs: number; effect?: string }>;
   trace: Array<DecisionTrace & { step: number; latencyMs: number; elements: number }>;
   lastObservation?: Observation;
@@ -31,7 +31,7 @@ export class TaskRunner {
     this.prune();
     const task: Task = { id: randomUUID(), sessionId: driver.id, status: 'running', startedAt: Date.now(), steps: 0,
       request: { goal: input.goal, until: structuredClone(input.until), inputNames: Object.keys(input.inputs) },
-      metrics: { elapsedMs: 0, observeMs: 0, decisionMs: 0, executionMs: 0, modelCalls: 0, staleRetries: 0 }, events: [], trace: [] };
+      metrics: { elapsedMs: 0, observeMs: 0, decisionMs: 0, executionMs: 0, modelCalls: 0, staleRetries: 0, actionRecoveries: 0 }, events: [], trace: [] };
     const controller = new AbortController();
     this.tasks.set(task.id, task);
     this.inputs.set(task.id, structuredClone(input));
@@ -95,6 +95,7 @@ export class TaskRunner {
     // Progress is judged on task state, not on every pixel of a changing page: an action repeated on the
     // same progress digest is withdrawn after it twice changed nothing, and stops the task on a third try.
     const attempts = new Map<string, number>(), futile = new Map<string, number>();
+    const failed = new Map<string, { count: number; step: number }>();
     let idle = 0, staleStreak = 0;
     let pending: Observation | undefined;
     let previous: { action: Action; key: string; description: string; before: Observation; digest: string; event: Task['events'][number] } | undefined;
@@ -127,13 +128,19 @@ export class TaskRunner {
         if (idle >= 3) throw new BlockedError('The last three actions had no visible effect. Returning control to the assistant.');
         const inputs = { ...input.inputs, ...Object.fromEntries((observation.memory ?? []).map(f => [`memory:${f.key} (${f.source})`, f.value])) };
         const view = focusView(observation, `${input.goal} ${Object.keys(input.inputs).join(' ')}`);
+        const surface = JSON.stringify(view.elements.map(e => [e.id, e.actions]));
         const candidates = candidatesFor(view, inputs, { factored: this.decider.factored });
-        const withdrawn: string[] = [];
+        const withdrawn: string[] = [], unavailable: string[] = [];
         for (const [key, candidate] of Object.entries(candidates)) {
-          if (typeof candidate.action !== 'string' && (futile.get(`${digest}|${actionKey(candidate.action)}`) ?? 0) >= 2) { withdrawn.push(candidate.description); delete candidates[key]; }
+          if (typeof candidate.action === 'string') continue;
+          const failure = failed.get(`${digest}|${surface}|${actionKey(candidate.action)}`);
+          if (failure && (failure.count >= 2 || failure.step === task.steps)) { unavailable.push(candidate.description); delete candidates[key]; }
+          else if ((futile.get(`${digest}|${actionKey(candidate.action)}`) ?? 0) >= 2) { withdrawn.push(candidate.description); delete candidates[key]; }
         }
         const note = withdrawn.length ? `Not offered again because repeating them changed nothing: ${withdrawn.slice(0, 5).join('; ')}` : '';
         if (note && history.at(-1) !== note) history.push(note);
+        const failureNote = unavailable.length ? `Not offered again while the interface is unchanged because these actions failed: ${unavailable.slice(0, 5).join('; ')}` : '';
+        if (failureNote && history.at(-1) !== failureNote) history.push(failureNote);
         const context = { conditions: task.verification.checks.map(c => ({ condition: describeCondition(c.condition, observation.targets), met: c.passed })),
           ...(observation.clipboard ? { clipboard: { hasImage: observation.clipboard.hasImage, changedSinceStart: observation.clipboard.changeCount !== clipboardStart } } : {}) };
         const decision = await this.decider.decide({ ...input, inputs }, view, candidates, history, signal, context);
@@ -166,6 +173,21 @@ export class TaskRunner {
         catch (error) {
           // A stale target is re-observed and re-decided. Only a streak of them means the interface is unusable.
           if (error instanceof StaleObservationError && staleStreak++ < 3) { task.metrics.staleRetries++; continue; }
+          if (error instanceof RecoverableActionError && task.metrics.actionRecoveries < 8 && !signal.aborted) {
+            const durationMs = Math.round(performance.now() - t);
+            task.metrics.executionMs += durationMs;
+            task.metrics.actionRecoveries++;
+            task.steps++;
+            const failedKey = `${digest}|${surface}|${key}`;
+            failed.set(failedKey, { count: (failed.get(failedKey)?.count ?? 0) + 1, step: task.steps });
+            const effect = `${error.message} ${error.guidance}`;
+            task.events.push({ step: task.steps, action: selected.description, confidence: decision.confidence, durationMs, effect });
+            history.push(`${selected.description} → ${effect}`);
+            staleStreak = 0;
+            continue;
+          }
+          if (error instanceof RecoverableActionError && task.metrics.actionRecoveries >= 8)
+            throw new BlockedError('Eight browser actions failed; inspect the latest page state before continuing.');
           throw error;
         }
         signal.throwIfAborted();

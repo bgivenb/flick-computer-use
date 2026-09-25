@@ -4,7 +4,7 @@ import { homedir } from 'node:os';
 import { resolve } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { chromium, type Browser, type BrowserContext, type Frame, type Page, type ElementHandle } from 'playwright';
-import { StaleObservationError, type Action, type Driver, type ElementInfo, type Observation } from '../core/types.js';
+import { RecoverableActionError, StaleObservationError, type Action, type Driver, type ElementInfo, type Observation } from '../core/types.js';
 import { snapshotScript } from './browser-snapshot.js';
 
 export interface BrowserOptions { url: string; headless?: boolean; profile?: string; allowedOrigins?: string[]; browser?: 'chromium' | 'chrome'; connection?: 'dedicated' | 'existing-chrome'; recordVideoDir?: string }
@@ -188,8 +188,18 @@ export class BrowserDriver implements Driver {
         if (action.kind === 'select') await element.selectOption({ value: action.value }, { timeout: 1800 });
       } catch (error) {
         if (error instanceof StaleObservationError) throw error;
-        // Playwright's detailed error can echo a filled value; keep it out of tool logs.
-        throw new Error('The browser action could not complete. The target may have moved, been covered, or rejected the value. Inspect the session before retrying.');
+        // Playwright's detailed error can echo a filled value. Classify it without exposing raw text.
+        const detail = error instanceof Error ? error.message : '';
+        const [reason, guidance] = /intercepts pointer events|subtree intercepts/i.test(detail)
+          ? ['another element covered the target', 'Inspect the current page for an overlay or another visible route to the goal.']
+          : /not visible|outside of the viewport|not in viewport/i.test(detail)
+            ? ['the target was not visible', 'Use the freshly visible controls; scrolling or waiting may reveal the target.']
+            : /detached|not attached|not connected/i.test(detail)
+              ? ['the target moved or disappeared', 'Reconsider the goal using the new page state.']
+              : /timeout/i.test(detail)
+                ? ['the target did not become actionable in time', 'The page may still be loading; inspect the new state and choose a working control.']
+                : ['the page rejected the action', 'Check the current field or control state and choose another valid action.'];
+        throw new RecoverableActionError(reason, guidance);
       } finally { await handle.dispose(); }
     }
     // Give DOM handlers a frame without a multi-second fixed sleep or network-idle wait.
