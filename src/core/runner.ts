@@ -3,6 +3,7 @@ import { performance } from 'node:perf_hooks';
 import { setTimeout as delay } from 'node:timers/promises';
 import { BlockedError, candidatesFor, RecoverableActionError, StaleObservationError, TextHelperUnavailableError, verify, type Action, type Condition, type Decider, type DecisionTrace, type Driver, type Observation, type TaskInput, type TextHelper } from './types.js';
 import { describeCondition, describeEffect, focusView, progressDigest } from './scene.js';
+import { copyObservedText, wantsTextCopy, withCopyableText } from './copy-text.js';
 
 export type Status = 'running' | 'succeeded' | 'blocked' | 'failed' | 'cancelled' | 'timed_out';
 export interface Task {
@@ -128,9 +129,11 @@ export class TaskRunner {
         if (task.steps >= input.maxSteps) throw new BlockedError('Step limit reached before the success conditions were observed.');
         if (idle >= 3) throw new BlockedError('The last three actions had no visible effect. Returning control to the assistant.');
         const inputs = { ...input.inputs, ...Object.fromEntries((observation.memory ?? []).map(f => [`memory:${f.key} (${f.source})`, f.value])) };
-        const view = focusView(observation, `${input.goal} ${Object.keys(input.inputs).join(' ')}`);
+        const focused = focusView(observation, `${input.goal} ${Object.keys(input.inputs).join(' ')}`);
+        const canCopyText = wantsTextCopy(input.goal);
+        const view = canCopyText ? withCopyableText(focused) : focused;
         const surface = JSON.stringify(view.elements.map(e => [e.id, e.actions]));
-        const candidates = candidatesFor(view, inputs, { factored: this.decider.factored, canCompose: Boolean(this.textHelper) });
+        const candidates = candidatesFor(view, inputs, { factored: this.decider.factored, canCompose: Boolean(this.textHelper), canCopyText });
         const withdrawn: string[] = [], unavailable: string[] = [];
         for (const [key, candidate] of Object.entries(candidates)) {
           if (typeof candidate.action === 'string') continue;
@@ -183,7 +186,11 @@ export class TaskRunner {
         t = performance.now();
         try {
           const action = selected.action;
-          if (action.kind === 'compose') {
+          if (action.kind === 'copy_text') {
+            const source = view.elements.find(e => e.id === action.elementId);
+            if (!source) throw new StaleObservationError();
+            pending = await copyObservedText(driver, view, source, signal);
+          } else if (action.kind === 'compose') {
             const field = observation.elements.find(e => e.id === action.elementId);
             if (!field || field.disabled || !field.actions.includes('fill')) throw new StaleObservationError();
             const helperStarted = performance.now();

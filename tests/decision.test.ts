@@ -19,6 +19,29 @@ test('factored decisions resolve a field/value pair beyond the flat 255-choice l
   assert.deepEqual(candidates[result.choice].action, { kind: 'fill', elementId: 'e39', value: 'value19' });
   assert.equal(result.confidence, .8);
 });
+test('copy text is chosen as an operation followed by an observed text target', () => {
+  const o: Observation = { ...observed(0), text: 'The reference number is 1234.', elements: [
+    { id: 'read:line:1234', role: 'text', name: 'The reference number is 1234.', value: 'The reference number is 1234.', disabled: false, actions: [] },
+  ] };
+  const candidates = candidatesFor(o, {}, { factored: true, canCopyText: true });
+  const contract = decisionContract(candidates, o);
+  assert.ok(contract.questions.operation.criteria.copy_text);
+  assert.match(contract.questions.copy_text_target.criteria['read:line:1234'], /reference number/);
+  const selected = contract.resolve({ operation: answer('copy_text'), copy_text_target: answer('read:line:1234') });
+  assert.deepEqual(candidates[selected.choice].action, { kind: 'copy_text', elementId: 'read:line:1234' });
+});
+test('tab switching chooses an observed browser tab', () => {
+  const o: Observation = { ...observed(0), activeTabId: 'first', tabs: [
+    { id: 'first', title: 'First', url: 'https://example.test/first' },
+    { id: 'second', title: 'Second', url: 'https://example.test/second' },
+  ] };
+  const candidates = candidatesFor(o, {}, { factored: true });
+  const contract = decisionContract(candidates, o);
+  assert.ok(contract.questions.operation.criteria.switch_tab);
+  assert.match(Object.values(contract.questions.switch_tab_target.criteria).join(' '), /Second/);
+  const selected = contract.resolve({ operation: answer('switch_tab'), switch_tab_target: answer('switch_tab:second') });
+  assert.deepEqual(candidates[selected.choice].action, { kind: 'switch_tab', tabId: 'second' });
+});
 test('options are keyed by the element IDs in the request and described in words', () => {
   const o: Observation = { ...observed(0), elements: [
     { id: 'e8', role: 'textbox', name: 'Search', disabled: false, actions: ['click', 'fill'], focused: true },

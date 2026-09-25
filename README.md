@@ -49,7 +49,7 @@ Merge the generated `flick` entry into your MCP client's configuration. It launc
 
 `computer_execute` handles goals across an available browser/native target catalog. Screenshot tools let the host agent supply visual interpretation; Jev handles subsequent actions. [Tool schemas, examples, and internals](docs/reference.md)
 
-For your signed-in Chrome on macOS, use `connection: "existing-chrome"`. Enable remote debugging at `chrome://inspect/#remote-debugging`, then approve Chrome's connection prompt. Flick owns a task tab and disconnects without closing your browser. The default mode uses a dedicated Playwright profile. [Chrome connection documentation](https://developer.chrome.com/docs/devtools/agents/use-cases/auto-connect)
+For your signed-in Chrome on macOS, use `connection: "existing-chrome"`. Enable remote debugging at `chrome://inspect/#remote-debugging`, then approve Chrome's connection prompt. Flick starts in a task tab; Jev can switch among observed tabs in that Chrome profile. Closing the session closes only Flick-created tabs and leaves your other tabs and browser open. The default mode uses a dedicated Playwright profile. [Chrome connection documentation](https://developer.chrome.com/docs/devtools/agents/use-cases/auto-connect)
 
 ## Optional local playground
 

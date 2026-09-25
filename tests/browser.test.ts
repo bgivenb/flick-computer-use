@@ -56,6 +56,26 @@ test('real browser: form flow, stale observation rejection, and independent save
     assert.ok((await driver.screenshot()).length > 1000);
   } finally { await driver.close(); }
 });
+test('real browser: Jev can choose and switch between observed tabs', async t => {
+  const web = await fixture(); const dir = await mkdtemp(join(tmpdir(), 'flick-tabs-test-'));
+  t.after(async () => { await web.close(); await rm(dir, { recursive: true, force: true }); });
+  const driver = await BrowserDriver.open({ url: web.url + '/tabs', headless: true }, dir);
+  try {
+    const signal = new AbortController().signal;
+    const first = await driver.observe();
+    const link = first.elements.find(e => e.name === 'Open second tab');
+    assert.ok(link);
+    await driver.act({ kind: 'click', elementId: link.id }, first, signal);
+    const second = await driver.observe();
+    assert.equal(second.tabs?.length, 2);
+    assert.match(second.title, /Recovery destination/);
+    const firstTab = second.tabs!.find(tab => tab.id !== second.activeTabId)!;
+    assert.deepEqual(candidatesFor(second, {})[`switch_tab:${firstTab.id}`]?.action, { kind: 'switch_tab', tabId: firstTab.id });
+    const returned = await driver.act({ kind: 'switch_tab', tabId: firstTab.id }, second, signal);
+    assert.equal(returned?.activeTabId, firstTab.id);
+    assert.equal(returned?.title, 'First tab');
+  } finally { await driver.close(); }
+});
 test('real browser: whitespace-only editor has a usable fallback name', async t => {
   const web = await fixture(); const dir = await mkdtemp(join(tmpdir(), 'flick-editor-test-'));
   t.after(async () => { await web.close(); await rm(dir, { recursive: true, force: true }); });

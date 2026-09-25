@@ -4,6 +4,7 @@ export const actionSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('click'), elementId: z.string(), button: z.enum(['left', 'right', 'middle']).optional(), clickCount: z.number().int().min(1).max(2).optional() }),
   z.object({ kind: z.literal('fill'), elementId: z.string(), value: z.string().max(10000), submit: z.boolean().optional() }),
   z.object({ kind: z.literal('compose'), elementId: z.string() }),
+  z.object({ kind: z.literal('copy_text'), elementId: z.string() }),
   z.object({ kind: z.literal('select'), elementId: z.string(), value: z.string().max(1000) }),
   z.object({ kind: z.literal('scroll'), direction: z.enum(['up', 'down']) }),
   z.object({ kind: z.literal('scroll_top') }),
@@ -17,12 +18,14 @@ export const actionSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('back') }),
   z.object({ kind: z.literal('forward') }),
   z.object({ kind: z.literal('refresh') }),
+  z.object({ kind: z.literal('switch_tab'), tabId: z.string() }),
   z.object({ kind: z.literal('switch'), targetId: z.string() }),
   z.object({ kind: z.literal('remember'), elementId: z.string() }),
 ]);
 export type Action = z.infer<typeof actionSchema>;
 export const conditionSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('clipboard_image'), afterChangeCount: z.number().int() }),
+  z.object({ kind: z.literal('clipboard_text'), contains: z.string().max(1000).optional() }),
   z.object({ kind: z.literal('text'), text: z.string().min(1).max(1000) }),
   z.object({ kind: z.literal('url'), contains: z.string().min(1).max(2000) }),
   z.object({ kind: z.literal('field'), name: z.string().min(1), value: z.string().max(10000) }),
@@ -77,13 +80,15 @@ export interface Observation {
   memory?: Array<{ key: string; value: string; source: string }>;
   title: string;
   url?: string;
+  activeTabId?: string;
+  tabs?: Array<{ id: string; title: string; url: string }>;
   text: string;
   elements: ElementInfo[];
   truncated: boolean;
   capturedAt: number;
   ocr?: { used: boolean; durationMs?: number; reason?: string };
   ocrAvailable?: boolean;
-  clipboard?: { changeCount: number; hasImage: boolean };
+  clipboard?: { changeCount: number; hasImage: boolean; copiedText?: string };
   focusedId?: string;
   modal?: { kind: 'menu' | 'dialog'; label?: string };
   challenge?: string;
@@ -148,6 +153,7 @@ export function verify(observation: Observation, conditions: Condition[]) {
     let passed = false;
     switch (condition.kind) {
       case 'clipboard_image': passed = Boolean(observation.clipboard?.hasImage && observation.clipboard.changeCount > condition.afterChangeCount); break;
+      case 'clipboard_text': passed = Boolean(observation.clipboard?.copiedText && (!condition.contains || observation.clipboard.copiedText.includes(condition.contains))); break;
       case 'text': passed = observation.text.includes(condition.text); break;
       case 'url': passed = Boolean(observation.url?.includes(condition.contains)); break;
       case 'element': passed = observation.elements.some(e => e.name === condition.name && (!condition.role || e.role === condition.role)); break;
@@ -169,7 +175,7 @@ export function verify(observation: Observation, conditions: Condition[]) {
 
 // Keys name the operation and its observed target (click:e12, fill:e5:0), so every option refers to an
 // element in the same observation Jev receives.
-export function candidatesFor(observation: Observation, inputs: Record<string, string>, options: { factored?: boolean; canCompose?: boolean } = {}): Candidates {
+export function candidatesFor(observation: Observation, inputs: Record<string, string>, options: { factored?: boolean; canCompose?: boolean; canCopyText?: boolean } = {}): Candidates {
   const candidates: Candidates = {
     blocked: { action: 'blocked', description: 'Cannot proceed with the supplied values and available controls; return to the assistant.' },
     done: { action: 'done', description: 'The requested outcome is already visible. Code will independently verify it.' },
@@ -187,6 +193,9 @@ export function candidatesFor(observation: Observation, inputs: Record<string, s
     candidates.scan_screen = { action: { kind: 'scan_screen' }, description: 'Read rendered text from a local screenshot when visible page content or controls are missing from the ordinary observation.' };
   const inBrowser = observation.kind === 'browser' || (observation.kind === 'desktop' && Boolean(observation.url));
   if (inBrowser && !observation.modal) {
+    for (const tab of observation.tabs ?? []) if (tab.id !== observation.activeTabId)
+      candidates[`switch_tab:${tab.id}`] = { action: { kind: 'switch_tab', tabId: tab.id },
+        description: `Switch to browser tab ${JSON.stringify(tab.title)} (${tab.url})` };
     candidates.wait_for_change = { action: { kind: 'wait_for_change' }, description: 'Wait up to 3 seconds for visible content or resources to update.' };
     if (observation.loading?.pendingImages)
       candidates.wait_for_images = { action: { kind: 'wait_for_images' }, description: 'Wait up to 3 seconds for currently loading page images.' };
@@ -223,6 +232,9 @@ export function candidatesFor(observation: Observation, inputs: Record<string, s
     });
     if (element.actions.includes('fill') && options.canCompose)
       add(`compose:${element.id}`, { kind: 'compose', elementId: element.id }, `Use the fast text model to write and fill ${target} for the current goal`, label);
+    if (options.canCopyText && element.value?.trim() && element.value !== '[redacted]')
+      add(`copy_text:${element.id}`, { kind: 'copy_text', elementId: element.id },
+        `Copy the exact observed text from ${target} to the system clipboard`, `${label}: ${JSON.stringify(element.value.slice(0, 180))}`);
     if (element.actions.includes('select')) (element.options ?? []).forEach((option, index) => {
       if (!option.disabled && !option.selected) add(`select:${element.id}:${index}`, { kind: 'select', elementId: element.id, value: option.value }, `Select ${JSON.stringify(option.label)} in ${target}`, `${JSON.stringify(option.label)} in ${label}`);
     });

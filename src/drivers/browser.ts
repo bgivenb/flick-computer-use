@@ -27,11 +27,22 @@ export class BrowserDriver implements Driver {
   readonly label: string;
   private references = new Map<string, Map<string, Reference>>();
   private ownedPages = new Set<Page>();
+  private tabIds = new WeakMap<Page, string>();
+  private tabId(page: Page) {
+    let id = this.tabIds.get(page);
+    if (!id) { id = randomUUID(); this.tabIds.set(page, id); }
+    return id;
+  }
+  private tabAllowed(page: Page) {
+    if (!this.origins) return true;
+    try { return this.origins.has(new URL(page.url()).origin); } catch { return false; }
+  }
   private constructor(private context: BrowserContext, private page: Page, private origins: Set<string> | undefined, browser: string,
     private connectedBrowser?: Browser, private ocrImagePath?: string) {
     this.label = connectedBrowser ? 'Google Chrome (existing profile, task tab)' : `${browser === 'chrome' ? 'Google Chrome' : 'Chromium'} (dedicated automation profile)`;
     const adopt = (page: Page) => {
       this.ownedPages.add(page); this.page = page;
+      this.tabId(page);
       page.setDefaultTimeout(1800);
       page.on('dialog', dialog => { void dialog.dismiss().catch(() => {}); });
       if (connectedBrowser) page.on('popup', adopt);
@@ -220,11 +231,15 @@ export class BrowserDriver implements Driver {
       }
     }
     const text = texts.join('\n').slice(0, 24000);
+    const tabs = (await Promise.all(this.context.pages().filter(page => !page.isClosed() && this.tabAllowed(page)).map(async page => ({
+      id: this.tabId(page), title: await page.title().catch(() => page.url()), url: page.url(),
+    }))));
     const id = randomUUID();
     this.references.set(id, refs);
     while (this.references.size > 16) this.references.delete(this.references.keys().next().value!);
     return { id, revision: createHash('sha256').update(JSON.stringify([url, revisions])).digest('hex'),
       sessionId: this.id, kind: this.kind, title: await this.page.title(), url,
+      activeTabId: this.tabId(this.page), tabs,
       text, elements, truncated: truncated || texts.join('\n').length > 24000, capturedAt: Date.now(),
       ocrAvailable: ocrAvailable && ocr?.reason !== 'Local OCR scan failed.', ...(ocr ? { ocr } : {}),
       ...(focusedId ? { focusedId } : {}), ...(loading ? { loading } : {}), ...(scroll ? { scroll } : {}) };
@@ -245,11 +260,21 @@ export class BrowserDriver implements Driver {
   }
   async act(action: Action, observation: Observation, signal: AbortSignal) {
     signal.throwIfAborted();
+    if (action.kind === 'switch_tab') {
+      if (observation.sessionId !== this.id || !observation.tabs?.some(tab => tab.id === action.tabId)) throw new StaleObservationError();
+      const target = this.context.pages().find(page => !page.isClosed() && this.tabAllowed(page) && this.tabId(page) === action.tabId);
+      if (!target) throw new StaleObservationError();
+      signal.throwIfAborted();
+      await target.bringToFront();
+      this.page = target;
+      return this.observe();
+    }
     this.assertOpen();
     if (observation.sessionId !== this.id) throw new StaleObservationError();
     if (action.kind === 'wait') { await delay(200, undefined, { signal }); return; }
     if (action.kind === 'scan_screen') return this.observe({ ocr: 'always' }, signal);
     if (action.kind === 'compose') throw new Error('Text composition runs in the task runner.');
+    if (action.kind === 'copy_text') throw new Error('Text copying runs in the task runner.');
     if (action.kind === 'wait_for_change') return this.waitForChange(observation, signal);
     if (action.kind === 'wait_for_images') {
       const until = Date.now() + 3000;

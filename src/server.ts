@@ -11,6 +11,7 @@ import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { WorkflowRunner, workflowSchema } from './core/workflow.js';
 import { DesktopDriver, targetSchema, type DesktopTarget } from './drivers/desktop.js';
+import { copyObservedText } from './core/copy-text.js';
 
 export function createServer(config = loadConfig()) {
   const configuredHelpers: Array<{ provider: string; model: string; helper: TextHelper }> = [];
@@ -78,6 +79,7 @@ export function createServer(config = loadConfig()) {
     return json({ version: '0.1.0', transport: 'stdio', apiKeyConfigured: Boolean(config.apiKey), model: config.model,
       textHelper: textHelperDescription, native,
       capabilities: { browser: true, macos: process.platform === 'darwin', goalAcrossApps: true, taskMemory: true, factoredDecisions: true,
+        copyObservedText: process.platform === 'darwin', browserTabSwitching: true,
         generatedText: Boolean(textHelper), recoveryHints: Boolean(textHelper),
         ocr: process.platform === 'darwin' && existsSync(config.nativePath), browserOcr: process.platform === 'darwin' && existsSync(config.ocrImagePath) },
       dataFlow: 'Browser/desktop controls are read locally. Jev tasks send selected interface text and supplied inputs to TypeSafe. When chosen, local Apple Vision OCR reads a screenshot and its recognized text is added to the observation; the screenshot stays local. The configured text helper receives the goal, chosen field, and selected page text for drafting; after repeated failures it receives recent errors and controls for a recovery hint. No screenshots are sent to either model.' });
@@ -136,7 +138,12 @@ export function createServer(config = loadConfig()) {
     if (!observation || observation.sessionId !== sessionId) throw new Error('Unknown observation. Inspect this session again.');
     manual.add(sessionId);
     try {
-      const result = await driver.act(action, observation, AbortSignal.timeout(10000));
+      let result: Observation | void;
+      if (action.kind === 'copy_text') {
+        const source = observation.elements.find(e => e.id === action.elementId);
+        if (!source) throw new Error('Choose a text target from the current observation.');
+        result = await copyObservedText(driver, observation, source, AbortSignal.timeout(10000));
+      } else result = await driver.act(action, observation, AbortSignal.timeout(10000));
       return json(remember(result ?? await driver.observe()));
     } finally { manual.delete(sessionId); }
   }));

@@ -54,6 +54,9 @@ export function focusView(observation: Observation, hint: string, limit = 120): 
 export function describeCondition(condition: Condition, targets: Observation['targets'] = []) {
   switch (condition.kind) {
     case 'clipboard_image': return 'A new image has been copied to the clipboard since the task started.';
+    case 'clipboard_text': return condition.contains
+      ? `Text containing ${JSON.stringify(condition.contains)} was copied to the clipboard by this task.`
+      : 'Text was copied to the clipboard by this task.';
     case 'text': return `The interface shows the text ${JSON.stringify(condition.text)}.`;
     case 'url': return `The page address contains ${JSON.stringify(condition.contains)}.`;
     case 'field': return `The field ${JSON.stringify(condition.name)} contains ${JSON.stringify(condition.value)}.`;
@@ -69,7 +72,7 @@ export function describeCondition(condition: Condition, targets: Observation['ta
 // navigation, open layers, form state, and the clipboard count as the task's state.
 export function progressDigest(o: Observation) {
   const state = o.elements.filter(e => e.actions.includes('fill') || e.checked !== undefined || e.selected).map(e => [e.id, e.value, e.checked, e.selected]);
-  return createHash('sha256').update(JSON.stringify([o.targetId, o.url, o.title, o.modal, o.clipboard?.changeCount,
+  return createHash('sha256').update(JSON.stringify([o.targetId, o.activeTabId, o.url, o.title, o.modal, o.clipboard?.changeCount, o.clipboard?.copiedText,
     o.loading?.document, o.loading?.pendingImages, o.scroll?.y, state])).digest('hex').slice(0, 16);
 }
 
@@ -78,6 +81,8 @@ export function describeEffect(before: Observation, after: Observation, action: 
   const notes: string[] = [];
   if (action.kind === 'scan_screen' && after.ocr?.used)
     notes.push(`OCR found ${after.elements.filter(e => e.source === 'ocr').length} on-screen text targets`);
+  if (action.kind === 'copy_text') notes.push('the selected observed text was copied to the system clipboard');
+  if (before.activeTabId !== after.activeTabId && after.activeTabId) notes.push(`switched to browser tab ${JSON.stringify(after.title.slice(0, 80))}`);
   if (before.targetId !== after.targetId) notes.push(`now in ${after.targetId ?? 'no app'}`);
   if (after.url && before.url !== after.url) notes.push(`the address changed to ${shortUrl(after.url)}`);
   else if (before.title !== after.title) notes.push(`the window title changed to ${JSON.stringify(after.title.slice(0, 80))}`);

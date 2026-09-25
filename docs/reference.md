@@ -73,6 +73,9 @@ This is a schema example; the app must actually expose the indicated source, des
 
 Jev can remember exact observed text and reuse it in another app. Memory is bounded to 12 facts of up to 10,000 characters. `field_from_memory` compares a destination field with an exact remembered source. With `CEREBRAS_API_KEY` or `GROQ_API_KEY` configured, Jev can choose `compose` for an observed editable field; Qwen drafts the text, and Flick fills only that same observed field. Search fields are drafted for the current search step even if later form fields need more information. If the chosen field requires a missing personal or account fact, the helper can request an exact input. After two recoverable action failures, Qwen may add a short recovery hint to Jev's history; it does not execute an action or change the user's goal. Cerebras takes precedence when both providers are configured.
 
+For text-transfer goals on macOS, Jev can choose `copy_text` and then an observed text target in the same decision request. Flick offers readable fields, visible text lines, and a whole-page text option, rechecks the target, then writes and verifies the exact text in the system clipboard. Browser observations also list tabs from the connected context; `switch_tab` selects one by observed title and URL. In existing-Chrome mode, closing the session closes only tabs Flick created.
+For a copy-only goal, use `until: [{ "kind": "clipboard_text" }]`, optionally with `contains` to verify a known phrase. This condition records text copied by the current task, rather than treating an old clipboard value as success.
+
 `computer_workflow` is a separate convenience for a caller-specified sequence of native stages. Mixed browser/native stage plans have not been added to that tool.
 
 ## Tools
