@@ -38,7 +38,7 @@ export const taskSchema = z.object({
   goal: z.string().min(1).max(6000),
   inputs: z.record(z.string().max(100), z.string().max(10000)).default({}),
   until: z.array(conditionSchema).min(1).max(12),
-  maxSteps: z.number().int().min(1).max(100).default(25),
+  maxSteps: z.number().int().min(1).max(120).default(25),
   timeoutMs: z.number().int().min(1000).max(300000).default(60000),
   minConfidence: z.number().min(0).max(1).default(0.55),
 }).refine(v => Object.keys(v.inputs).length <= 20, 'Supply at most 20 input values');

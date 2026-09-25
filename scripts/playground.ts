@@ -122,7 +122,7 @@ async function route(req: IncomingMessage, res: ServerResponse) {
         ? [{ kind: 'url' as const, contains: doneText }]
         : [{ kind: 'text' as const, text: doneText }];
       const started = await (await client()).call('computer_execute', { goal, inputs: inputs(data.values),
-        targets: [target], until, maxSteps: 60, timeoutMs: 180_000,
+        targets: [target], until, maxSteps: 120, timeoutMs: 180_000,
         minConfidence: minimumConfidence(data.minConfidence) });
       task = { id: started.id, sessionId: started.sessionId, status: started.status };
       json(res, 200, started); return;
