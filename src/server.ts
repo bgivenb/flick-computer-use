@@ -158,12 +158,12 @@ export function createServer(config = loadConfig()) {
     finally { openingNative = false; }
   }));
   server.registerTool('computer_continue', {
-    description: 'Continue an unfinished stopped task with missing text values or additional guidance. Keeps the same apps, observed memory, and success conditions, then observes fresh state. Returns a new task ID linked to the previous attempt.',
-    inputSchema: { taskId: z.string(), inputs: taskSchema.shape.inputs, guidance: z.string().max(3000).default('') }, annotations: write,
-  }, safe(async ({ taskId, inputs, guidance }) => {
+    description: 'Continue an unfinished stopped task with missing text values, additional guidance, or a revised confidence threshold. Keeps the same apps, observed memory, and success conditions, then observes fresh state. Returns a new task ID linked to the previous attempt.',
+    inputSchema: { taskId: z.string(), inputs: taskSchema.shape.inputs, guidance: z.string().max(3000).default(''), minConfidence: z.number().min(0).max(1).optional() }, annotations: write,
+  }, safe(async ({ taskId, inputs, guidance, minConfidence }) => {
     const previous = runner.get(taskId);
     idle(previous.sessionId);
-    return json(runner.continue(session(previous.sessionId), taskId, inputs, guidance));
+    return json(runner.continue(session(previous.sessionId), taskId, inputs, guidance, minConfidence));
   }));
   server.registerTool('computer_workflow', {
     description: 'Start an ordered macOS workflow in one call. The local engine switches apps and runs Jev stages without returning to the assistant between clicks or apps. Supply goals, exact inputs, and observable conditions for each stage. inputsFrom can copy one observed field from an earlier zero-indexed stage. Holds desktop ownership until completion. Poll computer_status or stop with computer_cancel. Native apps stay open.',

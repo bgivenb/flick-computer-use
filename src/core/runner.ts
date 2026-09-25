@@ -40,7 +40,7 @@ export class TaskRunner {
     this.completions.set(task.id, this.run(driver, input, task, controller));
     return this.get(task.id);
   }
-  continue(driver: Driver, id: string, inputs: Record<string, string>, guidance = '') {
+  continue(driver: Driver, id: string, inputs: Record<string, string>, guidance = '', minConfidence?: number) {
     const previous = this.get(id);
     if (previous.sessionId !== driver.id) throw new Error('Continue in the original session.');
     if (previous.status === 'running' || previous.status === 'succeeded') throw new Error('Only an unfinished, stopped task can be continued.');
@@ -49,7 +49,7 @@ export class TaskRunner {
     if (Object.keys(merged).length > 20) throw new Error('Supply at most 20 input values.');
     const goal = guidance ? `${original.goal}\nAdditional guidance: ${guidance}` : original.goal;
     if (goal.length > 6000) throw new Error('Combined goal and guidance exceed 6000 characters.');
-    const result = this.start(driver, { ...original, inputs: merged, goal });
+    const result = this.start(driver, { ...original, inputs: merged, goal, minConfidence: minConfidence ?? original.minConfidence });
     this.tasks.get(result.id)!.continuedFrom = id;
     return this.get(result.id);
   }

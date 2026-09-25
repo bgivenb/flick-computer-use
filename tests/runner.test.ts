@@ -144,6 +144,17 @@ test('low confidence cannot cause an action', async () => {
   const result = await e.runner.wait(e.runner.start(e.driver, e.input).id, 1000);
   assert.equal(result.status, 'blocked'); assert.equal(e.clicks(), 0);
 });
+test('continuing a confidence block can use a lower threshold', async () => {
+  const e = environment({ decide: async (...args) => ({ ...await click.decide(...args), confidence: .2 }) });
+  e.input.minConfidence = .3;
+  const first = await e.runner.wait(e.runner.start(e.driver, e.input).id, 1000);
+  assert.equal(first.status, 'blocked'); assert.equal(e.clicks(), 0);
+  const continued = e.runner.continue(e.driver, first.id, {}, '', 0);
+  const result = await e.runner.wait(continued.id, 1000);
+  assert.equal(result.status, 'succeeded', result.reason);
+  assert.equal(result.continuedFrom, first.id);
+  assert.equal(e.clicks(), 1);
+});
 test('input choices never invent text, include disabled options, or silently truncate candidates', async () => {
   const e = environment(click);
   const o = await e.driver.observe();

@@ -41,6 +41,11 @@ function inputs(value: unknown): Input {
     throw new Error('Exact values must be a JSON object of names to text.');
   return parsed as Input;
 }
+function minimumConfidence(value: unknown) {
+  const parsed = Number(value ?? 0);
+  if (!Number.isFinite(parsed) || parsed < 0 || parsed > 1) throw new Error('Minimum confidence must be between 0 and 1.');
+  return parsed;
+}
 async function client() { return mcp ??= await mcpClient(resolve(config.localDir, 'playground')); }
 
 async function jevRequest(data: any) {
@@ -109,14 +114,16 @@ async function route(req: IncomingMessage, res: ServerResponse) {
         : { kind: 'macos', name: 'Mac app', bundleId: String(data.bundleId || 'com.google.Chrome').trim() };
       if (target.kind === 'browser' && !/^https?:\/\//.test(target.url)) throw new Error('Fast browser mode needs a starting http(s) URL.');
       const started = await (await client()).call('computer_execute', { goal, inputs: inputs(data.values),
-        targets: [target], until: [{ kind: 'text', text: doneText }], maxSteps: 60, timeoutMs: 180_000, minConfidence: 0.3 });
+        targets: [target], until: [{ kind: 'text', text: doneText }], maxSteps: 60, timeoutMs: 180_000,
+        minConfidence: minimumConfidence(data.minConfidence) });
       task = { id: started.id, sessionId: started.sessionId, status: started.status };
       json(res, 200, started); return;
     }
     if (req.url === '/api/task/continue') {
       if (!task || task.status === 'running' || task.status === 'succeeded') throw new Error('There is no stopped task to continue.');
       const result = await (await client()).call('computer_continue', { taskId: task.id,
-        guidance: String(data.guidance ?? '').trim(), inputs: inputs(data.values) });
+        guidance: String(data.guidance ?? '').trim(), inputs: inputs(data.values),
+        minConfidence: minimumConfidence(data.minConfidence) });
       task = { id: result.id, sessionId: result.sessionId, status: result.status };
       json(res, 200, result); return;
     }

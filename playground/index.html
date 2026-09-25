@@ -86,6 +86,8 @@
         <div id="url-wrap" hidden><label for="url">Starting URL</label><input id="url" type="url" placeholder="https://example.com/"></div></div>
       <label for="goal">What should Jev do?</label><textarea id="goal" placeholder="Describe the overall result, not a click-by-click plan." required></textarea>
       <label for="done">Done when visible text contains</label><input id="done" placeholder="An exact phrase shown after completion" required>
+      <label for="min-confidence">Minimum Jev confidence <small>(0 disables the cutoff)</small></label>
+      <input id="min-confidence" type="number" min="0" max="1" step="0.05" value="0">
       <label for="values">Exact text or values to type <small>(optional)</small></label><textarea id="values" placeholder='Plain text, or JSON such as {"post":"...","date":"9/26/2026"}' style="min-height:68px"></textarea>
       <div class="actions"><button id="run" type="submit">Run with Flick</button><button id="stop" type="button" class="secondary" disabled>Stop</button></div>
       <details id="continue-wrap" hidden><summary>Continue a stopped task</summary><label for="guidance">Your guidance</label><textarea id="guidance" placeholder="Give missing context or a new constraint. Jev will still choose the actions."></textarea><label for="more-values">Additional exact values</label><textarea id="more-values" placeholder="Plain text or JSON" style="min-height:60px"></textarea><div class="actions"><button id="continue" type="button">Continue</button></div></details>
@@ -150,7 +152,7 @@
     try {
       const status = await api('/api/task');
       if (!status) return;
-      for (const event of (status.events || []).slice(seen)) bubble(taskFeed, `Jev · step ${event.step}`, `${event.action}${event.effect ? '\n' + event.effect : ''}`);
+      for (const event of (status.events || []).slice(seen)) bubble(taskFeed, `Jev · step ${event.step}${event.confidence == null ? '' : ` · ${Math.round(event.confidence * 100)}% confidence`}`, `${event.action}${event.effect ? '\n' + event.effect : ''}`);
       seen = (status.events || []).length;
       if (status.status !== 'running' && !ended) {
         ended = true; $('run').disabled = false; $('stop').disabled = true;
@@ -164,7 +166,8 @@
   $('task-form').addEventListener('submit', async event => {
     event.preventDefault(); $('run').disabled = true; $('continue-wrap').hidden = true;
     const data = { target: $('target').value, bundleId: $('bundle').value, url: $('url').value,
-      goal: $('goal').value, doneText: $('done').value, values: $('values').value };
+      goal: $('goal').value, doneText: $('done').value, values: $('values').value,
+      minConfidence: Number($('min-confidence').value) };
     try {
       const started = await api('/api/task/start', data);
       currentTask = started.id; seen = 0; ended = false; taskFeed.replaceChildren();
@@ -177,7 +180,8 @@
     $('continue').disabled = true;
     try {
       const guidance = $('guidance').value, values = $('more-values').value;
-      const started = await api('/api/task/continue', { guidance, values });
+      const started = await api('/api/task/continue', { guidance, values,
+        minConfidence: Number($('min-confidence').value) });
       currentTask = started.id; seen = 0; ended = false; $('continue-wrap').hidden = true; $('run').disabled = true; $('stop').disabled = false;
       bubble(taskFeed, 'You', guidance || 'Continue with additional values', 'user'); void poll();
     } catch (error) { bubble(taskFeed, 'Error', error.message, 'error'); }
