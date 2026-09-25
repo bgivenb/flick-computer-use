@@ -85,7 +85,7 @@
         <div id="bundle-wrap"><label for="bundle">Mac app bundle ID</label><input id="bundle" value="com.google.Chrome"></div>
         <div id="url-wrap" hidden><label for="url">Starting URL</label><input id="url" type="url" placeholder="https://example.com/"></div></div>
       <label for="goal">What should Jev do?</label><textarea id="goal" placeholder="Describe the overall result, not a click-by-click plan." required></textarea>
-      <label for="done">Done when visible text contains</label><input id="done" placeholder="An exact phrase shown after completion" required>
+      <label for="done">Done when visible text or page URL contains</label><input id="done" placeholder="A visible phrase, or the destination URL" required>
       <label for="min-confidence">Minimum Jev confidence <small>(0 disables the cutoff)</small></label>
       <input id="min-confidence" type="number" min="0" max="1" step="0.05" value="0">
       <label for="values">Exact text or values to type <small>(optional)</small></label><textarea id="values" placeholder='Plain text, or JSON such as {"post":"...","date":"9/26/2026"}' style="min-height:68px"></textarea>

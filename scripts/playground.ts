@@ -113,8 +113,11 @@ async function route(req: IncomingMessage, res: ServerResponse) {
         ? { kind: 'browser', name: 'Existing Chrome', connection: 'existing-chrome', url: String(data.url ?? '').trim() }
         : { kind: 'macos', name: 'Mac app', bundleId: String(data.bundleId || 'com.google.Chrome').trim() };
       if (target.kind === 'browser' && !/^https?:\/\//.test(target.url)) throw new Error('Fast browser mode needs a starting http(s) URL.');
+      const until = /^https?:\/\//i.test(doneText)
+        ? [{ kind: 'url' as const, contains: doneText }]
+        : [{ kind: 'text' as const, text: doneText }];
       const started = await (await client()).call('computer_execute', { goal, inputs: inputs(data.values),
-        targets: [target], until: [{ kind: 'text', text: doneText }], maxSteps: 60, timeoutMs: 180_000,
+        targets: [target], until, maxSteps: 60, timeoutMs: 180_000,
         minConfidence: minimumConfidence(data.minConfidence) });
       task = { id: started.id, sessionId: started.sessionId, status: started.status };
       json(res, 200, started); return;
