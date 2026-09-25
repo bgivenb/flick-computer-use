@@ -184,9 +184,9 @@ export class FallbackTextHelper implements TextHelper {
     }
     const soonestIndex = this.providers.map((_, index) => index).sort((a, b) => readyAt(a) - readyAt(b))[0];
     const waitMs = readyAt(soonestIndex) - Date.now();
-    if (waitMs >= 0 && waitMs <= 10_000) {
+    if (waitMs <= 10_000) {
       try {
-        await delay(waitMs, undefined, { signal });
+        await delay(Math.max(0, waitMs), undefined, { signal });
         const started = performance.now();
         const result = await call(this.providers[soonestIndex]);
         modelCalls += count(result);

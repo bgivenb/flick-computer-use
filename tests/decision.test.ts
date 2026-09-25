@@ -72,11 +72,29 @@ test('service failures keep their evidence, and successful requests record size 
     /HTTP 400: invalid_request: state exceeds 32k tokens; request \d+ characters/);
   let calls = 0;
   await assert.rejects(decide(async () => { calls++; throw new TypeError('fetch failed', { cause: Object.assign(new Error('other side closed'), { code: 'UND_ERR_SOCKET' }) }); }),
-    /after 3 attempt\(s\) \(UND_ERR_SOCKET: other side closed\)/);
-  assert.equal(calls, 3);
+    /after 5 attempt\(s\) \(UND_ERR_SOCKET: other side closed\)/);
+  assert.equal(calls, 5);
   const ok = await decide(async () => new Response(JSON.stringify({ model: 'jev-1.13.0', usage: { input_tokens: 812 }, answers: { operation: answer('done') } })));
   assert.equal(ok.choice, 'done'); assert.equal(ok.trace?.inputTokens, 812); assert.equal(ok.trace?.model, 'jev-1.13.0');
   assert.ok(ok.trace!.requestChars > 100); assert.equal(ok.trace?.used[0].question, 'operation');
+});
+test('a TLS transport failure gets slower retries and a fresh-connection fallback', async () => {
+  const o = observed();
+  const input = taskSchema.parse({ sessionId: 's', goal: 'Finish', until: [{ kind: 'text', text: 'Finished' }] });
+  let pooledCalls = 0, freshCalls = 0;
+  const broken = Object.assign(new Error('ssl/tls alert bad record mac'), { code: 'ERR_SSL_SSL/TLS_ALERT_BAD_RECORD_MAC' });
+  const decider = new TypeSafeDecider('k', 'jev-latest', async () => {
+    pooledCalls++;
+    throw new TypeError('fetch failed', { cause: broken });
+  }, async () => {
+    freshCalls++;
+    return new Response(JSON.stringify({ answers: { operation: answer('done') } }));
+  });
+  const result = await decider.decide(input, o, candidatesFor(o, {}), [], new AbortController().signal);
+  assert.equal(result.choice, 'done');
+  assert.equal(pooledCalls, 4);
+  assert.equal(freshCalls, 1);
+  assert.equal(result.modelCalls, 5);
 });
 test('selected answers must reference offered choices; unrelated answers do not affect a decision', () => {
   const o = observed(), candidates = candidatesFor(o, { text: 'Hello' });

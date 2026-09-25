@@ -1,4 +1,5 @@
 import { performance } from 'node:perf_hooks';
+import { request as httpsRequest } from 'node:https';
 import { setTimeout as delay } from 'node:timers/promises';
 import { z } from 'zod';
 import { describeCondition } from '../core/scene.js';
@@ -163,9 +164,34 @@ async function errorDetail(response: Response) {
   } catch { return ''; }
 }
 
+// A fresh TLS connection avoids reusing an unhealthy fetch socket after repeated transport errors.
+// This is only used on the final retry; ordinary decisions keep the faster pooled fetch path.
+export const freshConnectionFetch: typeof fetch = async (input, init) => new Promise<Response>((resolve, reject) => {
+  const url = new URL(String(input));
+  const headers = new Headers(init?.headers);
+  const request = httpsRequest(url, { method: init?.method ?? 'GET', headers: Object.fromEntries(headers),
+    agent: false, signal: init?.signal ?? undefined }, response => {
+    const chunks: Buffer[] = [];
+    let size = 0;
+    response.on('data', (chunk: Buffer) => {
+      size += chunk.length;
+      if (size > 2_000_000) response.destroy(new Error('TypeSafe response exceeded 2 MB.'));
+      else chunks.push(chunk);
+    });
+    response.once('error', reject);
+    response.once('aborted', () => reject(new Error('TypeSafe response closed before completion.')));
+    response.once('end', () => resolve(new Response(Buffer.concat(chunks), { status: response.statusCode ?? 500,
+      headers: { 'content-type': String(response.headers['content-type'] ?? ''),
+        'retry-after': String(response.headers['retry-after'] ?? '') } })));
+  });
+  request.once('error', reject);
+  request.end(typeof init?.body === 'string' ? init.body : undefined);
+});
+
 export class TypeSafeDecider implements Decider {
   readonly factored = true;
-  constructor(private key: string, private model = 'jev-latest', private request: typeof fetch = fetch) {}
+  constructor(private key: string, private model = 'jev-latest', private request: typeof fetch = fetch,
+    private fallbackRequest: typeof fetch = request === fetch ? freshConnectionFetch : request) {}
   async decide(input: TaskInput, observation: Observation, candidates: Candidates, history: string[], signal: AbortSignal, context?: DecisionContext) {
     const started = performance.now();
     let available = { ...candidates };
@@ -175,12 +201,12 @@ export class TypeSafeDecider implements Decider {
     const recoveries: Array<{ operation: string; elementId: string }> = [];
     let modelCalls = 0, inputTokens = 0;
     let failure = '';
-    for (let attempt = 0; attempt < 3; attempt++) {
+    for (let attempt = 0; attempt < 5; attempt++) {
       signal.throwIfAborted();
       let response: Response;
       try {
         modelCalls++;
-        response = await this.request('https://api.typesafe.ai/v1/systemone', {
+        response = await (attempt === 4 ? this.fallbackRequest : this.request)('https://api.typesafe.ai/v1/systemone', {
           method: 'POST', redirect: 'error', headers: { Authorization: `Bearer ${this.key}`, 'Content-Type': 'application/json' },
           body, signal: AbortSignal.any([signal, AbortSignal.timeout(15000)]),
         });
@@ -189,11 +215,11 @@ export class TypeSafeDecider implements Decider {
         const code = typeof cause === 'object' && cause && 'code' in cause ? String(cause.code) : '';
         failure = clip(`${code || (cause instanceof Error ? cause.name : 'Error')}: ${cause instanceof Error ? cause.message : String(cause)}`, 200);
         const transient = error instanceof TypeError || ['ECONNRESET', 'EPIPE', 'ETIMEDOUT', 'UND_ERR_SOCKET', 'UND_ERR_CONNECT_TIMEOUT'].includes(code);
-        if (!transient || attempt === 2 || signal.aborted) throw new Error(`TypeSafe request failed after ${attempt + 1} attempt(s) (${failure}).`, { cause: error });
-        await delay(100 * 2 ** attempt, undefined, { signal });
+        if (!transient || attempt === 4 || signal.aborted) throw new Error(`TypeSafe request failed after ${attempt + 1} attempt(s) (${failure}).`, { cause: error });
+        await delay(150 * 2 ** attempt, undefined, { signal });
         continue;
       }
-      if ([429, 529, 503].includes(response.status) && attempt < 2) {
+      if ([429, 529, 503].includes(response.status) && attempt < 4) {
         failure = `HTTP ${response.status}`;
         await response.body?.cancel(); await delay(300 * 2 ** attempt, undefined, { signal }); continue;
       }
