@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { fixture } from './fixture.js';
 import { BrowserDriver } from '../src/drivers/browser.js';
-import { StaleObservationError } from '../src/core/types.js';
+import { StaleObservationError, candidatesFor } from '../src/core/types.js';
 
 test('real browser: form flow, stale observation rejection, and independent saved state', async t => {
   const web = await fixture(); const dir = await mkdtemp(join(tmpdir(), 'jev-test-'));
@@ -108,5 +108,54 @@ test('real browser: an explicit origin list still restricts navigation', async t
     const link = before.elements.find(e => e.name === 'Open other site')!;
     await driver.act({ kind: 'click', elementId: link.id }, before, new AbortController().signal);
     await assert.rejects(driver.observe(), /outside the session’s explicitly allowed origins/);
+  } finally { await driver.close(); }
+});
+test('real browser: Jev recovery actions wait for late content and images, then navigate history and refresh', async t => {
+  const web = await fixture(); const dir = await mkdtemp(join(tmpdir(), 'jev-test-'));
+  t.after(async () => { await web.close(); await rm(dir, { recursive: true, force: true }); });
+  const driver = await BrowserDriver.open({ url: web.url + '/recovery', headless: true }, dir);
+  const signal = new AbortController().signal;
+  try {
+    let observation = await driver.observe();
+    assert.equal(observation.loading?.pendingImages, 1);
+    assert.ok(candidatesFor(observation, {}).wait_for_load);
+    assert.ok(candidatesFor(observation, {}).wait_for_change);
+    assert.ok(candidatesFor(observation, {}).wait_for_images);
+    observation = (await driver.act({ kind: 'wait_for_change' }, observation, signal))!;
+    assert.ok(observation.text.includes('Results are ready') || observation.loading?.pendingImages === 0);
+    observation = (await driver.act({ kind: 'wait_for_images' }, observation, signal))!;
+    assert.equal(observation.loading?.pendingImages, 0);
+    observation = (await driver.act({ kind: 'wait_for_load' }, observation, signal))!;
+    assert.equal(observation.loading?.document, 'complete');
+    assert.equal(observation.loading?.pendingImages, 0);
+    assert.equal(candidatesFor(observation, {}).wait_for_load, undefined);
+    assert.equal(candidatesFor(observation, {}).wait_for_images, undefined);
+    const link = observation.elements.find(e => e.name === 'Next page')!;
+    await driver.act({ kind: 'click', elementId: link.id }, observation, signal);
+    observation = await driver.observe();
+    assert.match(observation.text, /Next page arrived/);
+    observation = (await driver.act({ kind: 'back' }, observation, signal))!;
+    assert.equal(observation.url, web.url + '/recovery');
+    observation = (await driver.act({ kind: 'forward' }, observation, signal))!;
+    assert.equal(observation.url, web.url + '/recovery-next');
+    observation = (await driver.act({ kind: 'refresh' }, observation, signal))!;
+    assert.match(observation.text, /Next page arrived/);
+  } finally { await driver.close(); }
+});
+test('real browser: jump to bottom and top exposes page position', async t => {
+  const web = await fixture(); const dir = await mkdtemp(join(tmpdir(), 'jev-test-'));
+  t.after(async () => { await web.close(); await rm(dir, { recursive: true, force: true }); });
+  const driver = await BrowserDriver.open({ url: web.url + '/long-page', headless: true }, dir);
+  const signal = new AbortController().signal;
+  try {
+    let observation = await driver.observe();
+    assert.equal(observation.scroll?.canScrollDown, true);
+    assert.ok(candidatesFor(observation, {}).scroll_bottom);
+    observation = (await driver.act({ kind: 'scroll_bottom' }, observation, signal))!;
+    assert.equal(observation.scroll?.canScrollUp, true);
+    assert.equal(observation.scroll?.canScrollDown, false);
+    assert.ok(candidatesFor(observation, {}).scroll_top);
+    observation = (await driver.act({ kind: 'scroll_top' }, observation, signal))!;
+    assert.equal(observation.scroll?.canScrollUp, false);
   } finally { await driver.close(); }
 });

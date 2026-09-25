@@ -145,6 +145,8 @@ export class BrowserDriver implements Driver {
     const refs = new Map<string, Reference>();
     let truncated = false;
     let focusedId: string | undefined;
+    let loading: Observation['loading'];
+    let scroll: Observation['scroll'];
     const frames = this.page.frames();
     for (let index = 0; index < frames.length; index++) {
       const frame = frames[index];
@@ -155,10 +157,16 @@ export class BrowserDriver implements Driver {
         await element?.dispose();
         if (!visible || !rect || rect.width <= 0 || rect.height <= 0 || rect.y > 900 || rect.x > 1280 || rect.x + rect.width < 0 || rect.y + rect.height < 0) continue;
       }
-      let snapshot: { epoch: string; text: string; elements: ElementInfo[]; truncated: boolean; scroll: number[]; focus: string[] };
+      let snapshot: { epoch: string; text: string; elements: ElementInfo[]; truncated: boolean; scroll: number[]; focus: string[];
+        loadState: 'loading' | 'interactive' | 'complete'; pendingImages: number };
       try { snapshot = await frame.evaluate(snapshotScript); }
       catch { truncated = true; continue; }
       revisions.push([index, snapshot.epoch, snapshot.scroll, snapshot.focus, snapshot.text, snapshot.elements]);
+      if (index === 0) {
+        loading = { document: snapshot.loadState, pendingImages: snapshot.pendingImages };
+        scroll = { x: snapshot.scroll[0], y: snapshot.scroll[1], canScrollUp: snapshot.scroll[1] > 5,
+          canScrollDown: snapshot.scroll[1] < snapshot.scroll[2] - 5 };
+      }
       texts.push(snapshot.text);
       truncated ||= snapshot.truncated;
       if (!focusedId && snapshot.focus[0] && snapshot.elements.some(e => e.id === snapshot.focus[0])) focusedId = `f${index}_${snapshot.focus[0]}`;
@@ -177,13 +185,64 @@ export class BrowserDriver implements Driver {
     return { id, revision: createHash('sha256').update(JSON.stringify([url, revisions])).digest('hex'),
       sessionId: this.id, kind: this.kind, title: await this.page.title(), url,
       text, elements, truncated: truncated || texts.join('\n').length > 24000, capturedAt: Date.now(),
-      ...(focusedId ? { focusedId } : {}) };
+      ...(focusedId ? { focusedId } : {}), ...(loading ? { loading } : {}), ...(scroll ? { scroll } : {}) };
+  }
+  private async waitForChange(observation: Observation, signal: AbortSignal) {
+    const changed = (now: Observation) => now.url !== observation.url || now.title !== observation.title ||
+      now.text !== observation.text || now.loading?.document !== observation.loading?.document ||
+      now.loading?.pendingImages !== observation.loading?.pendingImages ||
+      JSON.stringify(now.elements.map(e => [e.id, e.name, e.value, e.checked, e.selected, e.actions])) !==
+      JSON.stringify(observation.elements.map(e => [e.id, e.name, e.value, e.checked, e.selected, e.actions]));
+    const until = Date.now() + 3000;
+    let now = await this.observe();
+    while (!changed(now) && Date.now() < until) {
+      await delay(150, undefined, { signal });
+      now = await this.observe();
+    }
+    return now;
   }
   async act(action: Action, observation: Observation, signal: AbortSignal) {
     signal.throwIfAborted();
     this.assertOpen();
     if (observation.sessionId !== this.id) throw new StaleObservationError();
     if (action.kind === 'wait') { await delay(200, undefined, { signal }); return; }
+    if (action.kind === 'wait_for_change') return this.waitForChange(observation, signal);
+    if (action.kind === 'wait_for_images') {
+      const until = Date.now() + 3000;
+      let now = await this.observe();
+      while ((now.loading?.pendingImages ?? 0) > 0 && Date.now() < until) {
+        await delay(150, undefined, { signal });
+        now = await this.observe();
+      }
+      return now;
+    }
+    if (action.kind === 'wait_for_load') {
+      try { await this.page.waitForLoadState('load', { timeout: 3000 }); }
+      catch (error) { if (!(error instanceof Error && /timeout/i.test(error.message))) throw error; }
+      signal.throwIfAborted();
+      return this.observe();
+    }
+    if (action.kind === 'back' || action.kind === 'forward' || action.kind === 'refresh') {
+      const previous = this.page.url();
+      try {
+        const response = action.kind === 'back' ? await this.page.goBack({ waitUntil: 'domcontentloaded', timeout: 5000 })
+          : action.kind === 'forward' ? await this.page.goForward({ waitUntil: 'domcontentloaded', timeout: 5000 })
+            : await this.page.reload({ waitUntil: 'domcontentloaded', timeout: 5000 });
+        signal.throwIfAborted();
+        if (action.kind !== 'refresh' && !response && this.page.url() === previous)
+          throw new RecoverableActionError('no page in that history direction', 'Choose a visible route from the current page.');
+      } catch (error) {
+        if (error instanceof RecoverableActionError) throw error;
+        signal.throwIfAborted();
+        throw new RecoverableActionError('navigation did not finish in time', 'Observe the current page; it may still be loading or may have navigated.');
+      }
+      return this.observe();
+    }
+    if (action.kind === 'scroll_top' || action.kind === 'scroll_bottom') {
+      await this.page.evaluate(direction => window.scrollTo(0, direction === 'scroll_top' ? 0 : (document.scrollingElement?.scrollHeight ?? 0)), action.kind);
+      signal.throwIfAborted();
+      return this.observe();
+    }
     if (action.kind === 'switch' || action.kind === 'remember') throw new Error('Use a desktop session for switching and memory.');
     // Unrelated page changes do not invalidate a decision: only the target's identity (or, for a key, the
     // observed focus) must still match. Playwright separately checks visibility, stability, and occlusion.

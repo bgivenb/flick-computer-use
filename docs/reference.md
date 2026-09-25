@@ -2,6 +2,8 @@
 
 Flick runs an MCP server over stdio. There is no HTTP listener or separate Flick account. Its local runner retains browser/native connections across calls and can execute a whole goal without returning to the host assistant for each action.
 
+In browser tasks, Jev can choose a brief wait, wait for document load, wait for visible content to change, wait for loading images to finish, Back, Forward, Refresh, incremental scroll, or jump to the top or bottom. Flick reports document readiness, pending images, and page position in the observation. These are choices within the same task loop; the host assistant need not choose each recovery step. Document load does not imply that a single-page app has finished rendering, which is why the content-change wait is separate. Navigation and waits have short bounds and remain subject to the task timeout.
+
 The demo app has its own localhost HTTP server, separate from the MCP transport.
 
 ## Browser session

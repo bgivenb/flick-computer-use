@@ -69,7 +69,8 @@ export function describeCondition(condition: Condition, targets: Observation['ta
 // focus, form state, and the clipboard count as the task's state.
 export function progressDigest(o: Observation) {
   const state = o.elements.filter(e => e.actions.includes('fill') || e.checked !== undefined || e.selected).map(e => [e.id, e.value, e.checked, e.selected]);
-  return createHash('sha256').update(JSON.stringify([o.targetId, o.url, o.title, o.modal, o.focusedId, o.clipboard?.changeCount, state])).digest('hex').slice(0, 16);
+  return createHash('sha256').update(JSON.stringify([o.targetId, o.url, o.title, o.modal, o.focusedId, o.clipboard?.changeCount,
+    o.loading?.document, o.loading?.pendingImages, o.scroll?.y, state])).digest('hex').slice(0, 16);
 }
 
 const shortUrl = (url: string) => { try { const u = new URL(url); return `${u.host}${u.pathname}`.slice(0, 100); } catch { return url.slice(0, 100); } };
@@ -93,6 +94,11 @@ export function describeEffect(before: Observation, after: Observation, action: 
   const copying = action.kind === 'press' && action.key === 'c' && action.modifiers?.includes('Meta');
   if (before.clipboard && after.clipboard && before.clipboard.changeCount !== after.clipboard.changeCount) notes.push(after.clipboard.hasImage ? 'an image was copied to the clipboard' : 'the clipboard changed');
   else if (copying) notes.push('the clipboard did not change');
+  if (before.loading?.document !== after.loading?.document && after.loading) notes.push(`the document is ${after.loading.document}`);
+  if (before.loading && after.loading && before.loading.pendingImages !== after.loading.pendingImages)
+    notes.push(`${after.loading.pendingImages} images are still loading`);
+  if (before.scroll && after.scroll && before.scroll.y !== after.scroll.y)
+    notes.push(`scrolled to page position ${after.scroll.y}`);
   if (!notes.length) {
     const was = new Set(before.elements.map(e => e.id)), is = new Set(after.elements.map(e => e.id));
     const added = [...is].filter(k => !was.has(k)).length, removed = [...was].filter(k => !is.has(k)).length;

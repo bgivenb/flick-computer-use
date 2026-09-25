@@ -117,7 +117,7 @@ export class TaskRunner {
           previous.event.effect = effect;
           history.push(`${previous.description} → ${effect}${observation.title !== previous.before.title ? `; now ${observation.title}` : ''}`);
           // Scrolling that reveals new controls is progress even though the task state is unchanged.
-          const unchanged = digest === previous.digest && !(previous.action.kind === 'scroll' && effect.includes('controls appeared'));
+          const unchanged = digest === previous.digest && !(['scroll', 'scroll_top', 'scroll_bottom'].includes(previous.action.kind) && effect.includes('controls appeared'));
           if (unchanged) futile.set(`${previous.digest}|${previous.key}`, (futile.get(`${previous.digest}|${previous.key}`) ?? 0) + 1);
           idle = effect === 'no visible effect' ? idle + 1 : 0;
           previous = undefined;

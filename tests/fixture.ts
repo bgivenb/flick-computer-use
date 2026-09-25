@@ -44,6 +44,25 @@ export async function fixture(outboundUrl?: string) {
       document.getElementById('go').onclick = () => status('Searched ' + document.getElementById('q').value);
       document.getElementById('q').onkeydown = event => { if (event.key === 'Enter') status('Submitted ' + event.target.value); };</script>`);
     }
+    else if (request.url === '/recovery') {
+      response.setHeader('Content-Type', 'text/html');
+      response.end(`<!doctype html><title>Recovery start</title><a href="/recovery-next">Next page</a>
+        <p id="late">Waiting for data</p><img alt="Late illustration" src="/slow-image">
+        <script>setTimeout(() => { document.getElementById('late').textContent = 'Results are ready'; }, 350)</script>`);
+    }
+    else if (request.url === '/slow-image') {
+      await new Promise(resolve => setTimeout(resolve, 650));
+      response.setHeader('Content-Type', 'image/svg+xml');
+      response.end('<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20"></svg>');
+    }
+    else if (request.url === '/recovery-next') {
+      response.setHeader('Content-Type', 'text/html');
+      response.end('<!doctype html><title>Recovery destination</title><p>Next page arrived</p>');
+    }
+    else if (request.url === '/long-page') {
+      response.setHeader('Content-Type', 'text/html');
+      response.end('<!doctype html><title>Long page</title><div style="height:2400px">Top of page</div><p>Bottom of page</p>');
+    }
     else { response.setHeader('Content-Type', 'text/html'); response.end(html); }
   });
   await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));

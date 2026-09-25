@@ -74,5 +74,8 @@ export const snapshotScript = String.raw`(() => {
     elements.push(element);
   }
   const focus = active ? [state.ids.get(active) || '', active.tagName, active.getAttribute('role') || ''] : [];
-  return { epoch: state.epoch, title: document.title, text: text.join('\n').slice(0, 16000), elements, truncated: count > 120 || text.join('\n').length > 16000, scroll: [Math.round(scrollX), Math.round(scrollY)], focus };
+  const scrolling = document.scrollingElement;
+  return { epoch: state.epoch, title: document.title, text: text.join('\n').slice(0, 16000), elements, truncated: count > 120 || text.join('\n').length > 16000,
+    loadState: document.readyState, pendingImages: all.filter(node => node.tagName === 'IMG' && !node.complete).length,
+    scroll: [Math.round(scrollX), Math.round(scrollY), Math.max(0, (scrolling?.scrollHeight ?? 0) - innerHeight)], focus };
 })()`;

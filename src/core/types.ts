@@ -5,8 +5,16 @@ export const actionSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('fill'), elementId: z.string(), value: z.string().max(10000), submit: z.boolean().optional() }),
   z.object({ kind: z.literal('select'), elementId: z.string(), value: z.string().max(1000) }),
   z.object({ kind: z.literal('scroll'), direction: z.enum(['up', 'down']) }),
+  z.object({ kind: z.literal('scroll_top') }),
+  z.object({ kind: z.literal('scroll_bottom') }),
   z.object({ kind: z.literal('press'), key: z.enum(['Enter', 'Tab', 'Escape', 'ArrowDown', 'ArrowUp', 'ArrowLeft', 'ArrowRight', 'Backspace', 'a', 'c', 'n', 'o', 'v', 'f', 's', 'w']), modifiers: z.array(z.enum(['Meta', 'Shift', 'Alt', 'Control'])).max(4).optional() }),
   z.object({ kind: z.literal('wait') }),
+  z.object({ kind: z.literal('wait_for_load') }),
+  z.object({ kind: z.literal('wait_for_change') }),
+  z.object({ kind: z.literal('wait_for_images') }),
+  z.object({ kind: z.literal('back') }),
+  z.object({ kind: z.literal('forward') }),
+  z.object({ kind: z.literal('refresh') }),
   z.object({ kind: z.literal('switch'), targetId: z.string() }),
   z.object({ kind: z.literal('remember'), elementId: z.string() }),
 ]);
@@ -72,6 +80,8 @@ export interface Observation {
   focusedId?: string;
   modal?: { kind: 'menu' | 'dialog'; label?: string };
   challenge?: string;
+  loading?: { document: 'loading' | 'interactive' | 'complete'; pendingImages: number };
+  scroll?: { x: number; y: number; canScrollUp: boolean; canScrollDown: boolean };
 }
 export interface Driver {
   readonly id: string;
@@ -157,6 +167,21 @@ export function candidatesFor(observation: Observation, inputs: Record<string, s
   };
   if (observation.kind === 'desktop' && !observation.targetId) {
     for (const key of ['scroll_down', 'scroll_up', 'enter', 'tab', 'escape', 'wait']) delete candidates[key];
+  }
+  const inBrowser = observation.kind === 'browser' || (observation.kind === 'desktop' && Boolean(observation.url));
+  if (inBrowser && !observation.modal) {
+    candidates.wait_for_change = { action: { kind: 'wait_for_change' }, description: 'Wait up to 3 seconds for visible content or resources to update.' };
+    if (observation.loading?.pendingImages)
+      candidates.wait_for_images = { action: { kind: 'wait_for_images' }, description: 'Wait up to 3 seconds for currently loading page images.' };
+    if (observation.loading?.document !== 'complete')
+      candidates.wait_for_load = { action: { kind: 'wait_for_load' }, description: 'Wait up to 3 seconds for the current page document to finish loading.' };
+    candidates.back = { action: { kind: 'back' }, description: 'Go back to the previous page in this task tab.' };
+    candidates.forward = { action: { kind: 'forward' }, description: 'Go forward to the next page in this task tab.' };
+    candidates.refresh = { action: { kind: 'refresh' }, description: 'Refresh the current page and observe it again.' };
+    if (observation.scroll?.canScrollUp)
+      candidates.scroll_top = { action: { kind: 'scroll_top' }, description: 'Jump to the top of the current page.' };
+    if (observation.scroll?.canScrollDown)
+      candidates.scroll_bottom = { action: { kind: 'scroll_bottom' }, description: 'Jump to the bottom of the current page.' };
   }
   if (observation.modal) for (const key of ['scroll_down', 'scroll_up', 'enter', 'tab']) delete candidates[key];
   else if (observation.kind === 'macos' || (observation.kind === 'desktop' && observation.targetId && !observation.url)) {
