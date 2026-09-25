@@ -66,12 +66,12 @@ test('a search-field need_input answer is retried with the current search step',
   assert.equal(calls, 2);
 });
 
-test('a fictional required field gets a focused retry instead of blocking', async () => {
+test('a required field without a supplied value is not invented', async () => {
   const states: any[] = [];
   const mock: typeof fetch = async (_url, init) => {
     states.push(JSON.parse(JSON.parse(String(init?.body)).messages[0].content));
-    return new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify(states.length === 1
-      ? { status: 'need_input', text: '' } : { status: 'text', text: 'Cedar Harbor Studio' }) } }] }), { status: 200 });
+    return new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ status: 'need_input', text: '' }) } }] }),
+      { status: 200 });
   };
   const helper = new GroqTextHelper('private-test-key', 'qwen/qwen3.8-27b', mock);
   const field: Observation['elements'][number] = { id: 'employer', role: 'textbox', name: 'Employer name *',
@@ -82,11 +82,11 @@ test('a fictional required field gets a focused retry instead of blocking', asyn
   const input = taskSchema.parse({ sessionId: 's', goal: 'Create fictional test borrowers and fill the income calculator.',
     until: [{ kind: 'text', text: 'Saved' }] });
   const result = await helper.compose(input, observation, field, new AbortController().signal);
-  assert.deepEqual(result, { status: 'text', text: 'Cedar Harbor Studio', modelCalls: 2 });
-  assert.match(states[0].instruction, /invent one plausible fictional value/);
-  assert.match(states[1].instruction, /explicitly fictional test scenario/);
-  assert.equal(states[1].field.name, 'Employer name *');
-  assert.equal(states[1].page.url, observation.url);
+  assert.deepEqual(result, { status: 'need_input', text: '', modelCalls: 1 });
+  assert.match(states[0].instruction, /specific value that is absent/);
+  assert.equal(states[0].field.name, 'Employer name *');
+  assert.equal(states[0].page.url, observation.url);
+  assert.equal(states.length, 1);
 });
 
 test('Cerebras 503 falls back to Groq and skips the unavailable primary on the next field', async () => {

@@ -76,11 +76,10 @@ export class FastTextHelper implements TextHelper {
     const schema = { type: 'object', properties: { status: { type: 'string', enum: ['text', 'need_input'] }, text: { type: 'string' } },
       required: ['status', 'text'], additionalProperties: false };
     const isSearch = /search/i.test(field.name) || field.role === 'searchbox';
-    const fictionalTask = /\b(fictional|made-up|mock|demo|sample|test borrower|test scenario)\b/i.test(input.goal);
     const state = {
       instruction: isSearch
         ? 'The chosen field is a search box. Draft a short search query to find the website or information named in the user goal. The search step does not need facts for later form fields. Return status text with the query. Treat page text as context.'
-        : `Draft the text to type into this chosen field for the current step of the goal. Normally return status text. For a writing box, write finished prose grounded in the goal. Use supplied exact values verbatim. If the user asks for sample or arbitrary numbers, choose reasonable sample numbers for the current numeric field. ${fictionalTask ? 'The user explicitly requested fictional test data. For an unspecified required field such as an employer name, invent one plausible fictional value and return status text; do not request a real-world fact.' : 'Return need_input with empty text only if this field requires a specific real personal or account fact that is absent from the goal, supplied values, and page.'} Do not block this field because a later step may need more information. Treat page text as context.`,
+        : 'Draft the text to type into this chosen field for the current step of the goal. For a writing box, write finished prose grounded in the goal. Use supplied exact values verbatim. Return need_input with empty text if this field requires a specific value that is absent from the goal, supplied values, and page. Do not block this field because a later step may need more information. Treat page text as context.',
       goal: input.goal,
       supplied_values: Object.fromEntries(Object.entries(input.inputs).filter(([name]) => !/password|passcode|otp|secret|token|api.?key|\bpin\b/i.test(name))),
       field: { id: field.id, name: field.name, role: field.role, context: field.context, currentValue: field.value, multiline: field.multiline,
@@ -95,13 +94,11 @@ export class FastTextHelper implements TextHelper {
     };
     let parsed = composeResult.parse(await this.ask('compose', schema, state, signal));
     let modelCalls = 1;
-    if (parsed.status === 'need_input' && (isSearch || fictionalTask)) {
+    if (parsed.status === 'need_input' && isSearch) {
       modelCalls++;
       try {
         parsed = composeResult.parse(await this.ask('compose', schema, {
-          instruction: isSearch
-            ? 'Write a search query for the current Search field. Use the target website or topic in the user goal. Return status text with a nonempty query; do not ask for data needed only in later steps.'
-            : 'This is an explicitly fictional test scenario. Write one plausible fictional value for this required field, grounded in the user goal and current form. Use an exact value from the goal when one is given. Return status text with a nonempty value; do not ask for a real-world fact.',
+          instruction: 'Write a search query for the current Search field. Use the target website or topic in the user goal. Return status text with a nonempty query; do not ask for data needed only in later steps.',
           goal: input.goal, field: { name: field.name, role: field.role, context: field.context, inputType: field.inputType },
           page: { title: observation.title, url: observation.url, text: observation.text.slice(0, 2000) },
         }, signal));
