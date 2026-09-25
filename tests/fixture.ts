@@ -1,7 +1,7 @@
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 
-export async function fixture() {
+export async function fixture(outboundUrl?: string) {
   let saved: unknown = null;
   const html = `<!doctype html><html><head><title>Local automation lab</title><style>
   body{font:18px system-ui;max-width:760px;margin:60px auto;background:#f4f6f8;color:#172333}h1{font-size:36px}button,input,select{font:inherit;padding:12px;margin:8px 0}label{display:block;margin:16px 0}section{background:white;padding:30px;border-radius:16px}button{cursor:pointer}small{color:#59687c}
@@ -22,6 +22,10 @@ export async function fixture() {
       let body = ''; for await (const chunk of request) body += chunk;
       saved = JSON.parse(body); response.writeHead(200, { 'Content-Type': 'application/json' }); response.end('{"ok":true}');
     } else if (request.url === '/state') { response.writeHead(200, { 'Content-Type': 'application/json' }); response.end(JSON.stringify(saved)); }
+    else if (request.url === '/outbound' && outboundUrl) {
+      response.setHeader('Content-Type', 'text/html');
+      response.end(`<!doctype html><title>Outbound link</title><a href="${outboundUrl}">Open other site</a>`);
+    }
     else if (request.url === '/edges') {
       response.setHeader('Content-Type', 'text/html');
       response.end(`<!doctype html><title>Edge cases</title><label>Visible input<input id="visible"></label><input aria-label="Hidden input" hidden><input type="password" aria-label="Password" value="do-not-expose"><div id="shadow"></div><iframe src="/frame"></iframe><img alt="Test illustration" width="160" height="100" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='100'%3E%3Crect width='160' height='100' fill='blue'/%3E%3C/svg%3E"><script>document.getElementById('shadow').attachShadow({mode:'open'}).innerHTML='<button>Shadow action</button>'</script>`);

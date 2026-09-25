@@ -64,7 +64,7 @@ export function createServer(config = loadConfig()) {
       dataFlow: 'Browser/desktop controls are read locally. Jev tasks send selected interface text and supplied inputs to TypeSafe. No screenshots are sent to Jev.' });
   }));
   server.registerTool('computer_open', {
-    description: 'Open a dedicated browser, connect to existing Chrome in a new task tab, or connect to a native macOS app. connection existing-chrome uses the running personal profile and Chrome’s user-approved remote-debugging flow. Supply allowedOrigins for additional sites needed by the task. Native OCR runs locally.',
+    description: 'Open a dedicated browser, connect to existing Chrome in a new task tab, or connect to a native macOS app. Browser tasks can navigate across sites by default. Supply allowedOrigins only to opt into a navigation restriction. Existing Chrome uses the running profile and Chrome’s user-approved remote-debugging flow. Native OCR runs locally.',
     inputSchema: {
       kind: z.enum(['browser', 'macos']).default('browser'), url: z.string().url().optional(),
       headless: z.boolean().default(false), profile: z.string().regex(/^[a-zA-Z0-9_-]{1,60}$/).default('default'),

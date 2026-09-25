@@ -82,3 +82,31 @@ test('real browser: clipped skip link is not offered as a clickable control', as
     assert.equal(observation.elements.find(e => e.name === 'Open results')?.actions.includes('click'), true);
   } finally { await driver.close(); }
 });
+test('real browser: default session follows links to another origin', async t => {
+  const destination = await fixture(); const source = await fixture(destination.url);
+  const dir = await mkdtemp(join(tmpdir(), 'jev-test-'));
+  t.after(async () => { await source.close(); await destination.close(); await rm(dir, { recursive: true, force: true }); });
+  const driver = await BrowserDriver.open({ url: source.url + '/outbound', headless: true }, dir);
+  try {
+    const before = await driver.observe();
+    const link = before.elements.find(e => e.name === 'Open other site');
+    assert.ok(link?.actions.includes('click'));
+    await driver.act({ kind: 'click', elementId: link.id }, before, new AbortController().signal);
+    const after = await driver.observe();
+    assert.equal(after.url, destination.url + '/');
+    assert.match(after.text, /Local automation lab/);
+  } finally { await driver.close(); }
+});
+test('real browser: an explicit origin list still restricts navigation', async t => {
+  const destination = await fixture(); const source = await fixture(destination.url);
+  const dir = await mkdtemp(join(tmpdir(), 'jev-test-'));
+  t.after(async () => { await source.close(); await destination.close(); await rm(dir, { recursive: true, force: true }); });
+  const driver = await BrowserDriver.open({ url: source.url + '/outbound', headless: true,
+    allowedOrigins: ['https://example.org'] }, dir);
+  try {
+    const before = await driver.observe();
+    const link = before.elements.find(e => e.name === 'Open other site')!;
+    await driver.act({ kind: 'click', elementId: link.id }, before, new AbortController().signal);
+    await assert.rejects(driver.observe(), /outside the session’s explicitly allowed origins/);
+  } finally { await driver.close(); }
+});

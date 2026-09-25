@@ -9,13 +9,21 @@ import { snapshotScript } from './browser-snapshot.js';
 
 export interface BrowserOptions { url: string; headless?: boolean; profile?: string; allowedOrigins?: string[]; browser?: 'chromium' | 'chrome'; connection?: 'dedicated' | 'existing-chrome'; recordVideoDir?: string }
 type Reference = { frame: Frame; localId: string; epoch: string; imageUrl?: string };
+function navigationOrigins(start: URL, allowedOrigins?: string[]) {
+  if (!allowedOrigins?.length) return undefined;
+  return new Set([start.origin, ...allowedOrigins.map(value => {
+    const parsed = new URL(value);
+    if (!['http:', 'https:'].includes(parsed.protocol)) throw new Error('Allowed origins must use HTTP or HTTPS.');
+    return parsed.origin;
+  })]);
+}
 export class BrowserDriver implements Driver {
   readonly id = randomUUID();
   readonly kind = 'browser' as const;
   readonly label: string;
   private references = new Map<string, Map<string, Reference>>();
   private ownedPages = new Set<Page>();
-  private constructor(private context: BrowserContext, private page: Page, private origins: Set<string>, browser: string,
+  private constructor(private context: BrowserContext, private page: Page, private origins: Set<string> | undefined, browser: string,
     private connectedBrowser?: Browser) {
     this.label = connectedBrowser ? 'Google Chrome (existing profile, task tab)' : `${browser === 'chrome' ? 'Google Chrome' : 'Chromium'} (dedicated automation profile)`;
     const adopt = (page: Page) => {
@@ -36,11 +44,7 @@ export class BrowserDriver implements Driver {
     if (!/^[a-zA-Z0-9_-]{1,60}$/.test(profile)) throw new Error('Profile must contain 1–60 letters, numbers, underscores, or hyphens.');
     const profilePath = resolve(dataDir, 'browser-profiles', profile);
     await mkdir(profilePath, { recursive: true, mode: 0o700 });
-    const origins = new Set([url.origin, ...(options.allowedOrigins ?? []).map(value => {
-      const parsed = new URL(value);
-      if (!['http:', 'https:'].includes(parsed.protocol)) throw new Error('Allowed origins must use HTTP or HTTPS.');
-      return parsed.origin;
-    })]);
+    const origins = navigationOrigins(url, options.allowedOrigins);
     const context = await chromium.launchPersistentContext(profilePath, {
       channel: options.browser === 'chrome' ? 'chrome' : undefined,
       chromiumSandbox: true,
@@ -49,12 +53,14 @@ export class BrowserDriver implements Driver {
       ...(options.recordVideoDir ? { recordVideo: { dir: options.recordVideoDir, size: { width: 1280, height: 900 } } } : {}),
     });
     try {
-      // Restrict document navigation, not ordinary image/API/CDN subresources.
-      await context.route('**/*', route => {
-        const request = route.request();
-        if (request.isNavigationRequest() && !origins.has(new URL(request.url()).origin)) return route.abort('blockedbyclient');
-        return route.continue();
-      });
+      if (origins) {
+        // Explicit origin lists restrict document navigation, not image/API/CDN subresources.
+        await context.route('**/*', route => {
+          const request = route.request();
+          if (request.isNavigationRequest() && !origins.has(new URL(request.url()).origin)) return route.abort('blockedbyclient');
+          return route.continue();
+        });
+      }
       const page = context.pages()[0] ?? await context.newPage();
       await page.goto(url.href, { waitUntil: 'domcontentloaded', timeout: 20000 });
       return new BrowserDriver(context, page, origins, options.browser ?? 'chromium');
@@ -64,11 +70,7 @@ export class BrowserDriver implements Driver {
     if (options.recordVideoDir) throw new Error('Built-in video recording requires a dedicated browser. Record your screen for an existing-Chrome session.');
     if (process.platform !== 'darwin') throw new Error('Existing Chrome discovery currently supports macOS.');
     const url = new URL(options.url);
-    const origins = new Set([url.origin, ...(options.allowedOrigins ?? []).map(value => {
-      const parsed = new URL(value);
-      if (!['http:', 'https:'].includes(parsed.protocol)) throw new Error('Allowed origins must use HTTP or HTTPS.');
-      return parsed.origin;
-    })]);
+    const origins = navigationOrigins(url, options.allowedOrigins);
     let address: string;
     try { address = await readFile(resolve(homedir(), 'Library/Application Support/Google/Chrome/DevToolsActivePort'), 'utf8'); }
     catch { throw new Error('Enable remote debugging in your running Chrome at chrome://inspect/#remote-debugging, then connect again.'); }
@@ -83,12 +85,14 @@ export class BrowserDriver implements Driver {
       if (!context) throw new Error('The connected Chrome did not expose a browser context.');
       page = await context.newPage();
       const driver = new BrowserDriver(context, page, origins, 'chrome', browser);
-      // Scope navigation handling to this task's tab; never route the user's whole browser context.
-      await page.route('**/*', route => {
-        const request = route.request();
-        if (request.isNavigationRequest() && !origins.has(new URL(request.url()).origin)) return route.abort('blockedbyclient');
-        return route.continue();
-      });
+      if (origins) {
+        // Scope an explicit restriction to this task's tab, never the user's whole browser context.
+        await page.route('**/*', route => {
+          const request = route.request();
+          if (request.isNavigationRequest() && !origins.has(new URL(request.url()).origin)) return route.abort('blockedbyclient');
+          return route.continue();
+        });
+      }
       await page.goto(url.href, { waitUntil: 'domcontentloaded', timeout: 20000 });
       return driver;
     } catch (error) {
@@ -99,7 +103,7 @@ export class BrowserDriver implements Driver {
   }
   private assertOpen() {
     if (this.page.isClosed()) throw new Error('The browser tab was closed. Open a new session.');
-    if (!this.origins.has(new URL(this.page.url()).origin)) throw new Error('This page is outside the session’s allowed origins.');
+    if (this.origins && !this.origins.has(new URL(this.page.url()).origin)) throw new Error('This page is outside the session’s explicitly allowed origins.');
   }
   async observe(): Promise<Observation> {
     this.assertOpen();

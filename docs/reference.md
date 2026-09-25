@@ -16,7 +16,7 @@ The demo app has its own localhost HTTP server, separate from the MCP transport.
 
 Pass this to `computer_open`. Existing-Chrome mode discovers the standard Chrome debugging endpoint on macOS, asks Chrome to connect, and creates a task tab. Page routing and dialog handling are scoped to owned pages. Closing the session closes its task tabs and disconnects without closing the user's browser context. The user operates Chrome's approval dialog.
 
-Omit `connection` for a dedicated persistent Playwright profile. `browser: "chrome"` selects installed Google Chrome; the default is Chromium. `profile` names an isolated directory under `.local/browser-profiles`. `allowedOrigins` adds navigation destinations beyond the starting origin. Asset/API subresources are not restricted by this navigation rule.
+Omit `connection` for a dedicated persistent Playwright profile. `browser: "chrome"` selects installed Google Chrome; the default is Chromium. `profile` names an isolated directory under `.local/browser-profiles`. Browser tasks can navigate across sites by default. Supplying a nonempty `allowedOrigins` list opts into restricting document navigation to the starting origin and listed origins; asset/API subresources remain unrestricted.
 
 `recordVideo: true` records dedicated-browser sessions into `.local/recordings`; it is unsupported on an existing-Chrome connection. The video is finalized when the session closes.
 
