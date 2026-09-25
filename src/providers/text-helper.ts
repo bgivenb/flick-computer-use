@@ -1,28 +1,72 @@
 import { z } from 'zod';
 import { TextHelperUnavailableError, type ElementInfo, type Observation, type TaskInput, type TextHelper } from '../core/types.js';
+import { setTimeout as delay } from 'node:timers/promises';
 
 const composeResult = z.object({ status: z.enum(['text', 'need_input']), text: z.string().max(10000) });
 const repairResult = z.object({ guidance: z.string().max(500) });
 type Shape = 'compose' | 'repair';
+function retryAfterMs(response: Response) {
+  const header = response.headers.get('retry-after');
+  if (!header) return undefined;
+  const seconds = Number(header);
+  const milliseconds = Number.isFinite(seconds) ? seconds * 1000 : Date.parse(header) - Date.now();
+  return Number.isFinite(milliseconds) ? Math.max(0, milliseconds) : undefined;
+}
+
+function durationMs(value: string | null) {
+  if (!value) return undefined;
+  const parts = [...value.matchAll(/(\d+(?:\.\d+)?)(ms|h|m|s)/g)];
+  if (!parts.length) return undefined;
+  return parts.reduce((total, [, amount, unit]) => total + Number(amount) *
+    ({ h: 3_600_000, m: 60_000, s: 1000, ms: 1 }[unit] ?? 0), 0);
+}
+
+function nearbyFields(observation: Observation, field: ElementInfo) {
+  const fields = observation.elements.filter(e => e.actions.includes('fill') || e.actions.includes('select'));
+  const index = fields.findIndex(e => e.id === field.id);
+  return fields.slice(Math.max(0, index - 5), Math.max(0, index - 5) + 16);
+}
+
+function relevantPageText(observation: Observation, field: ElementInfo) {
+  const at = observation.text.toLowerCase().indexOf(field.name.replace(/\s*\*$/, '').toLowerCase());
+  return observation.text.slice(Math.max(0, at - 450), Math.max(0, at - 450) + 1800);
+}
 
 export class FastTextHelper implements TextHelper {
-  constructor(private key: string, private model: string, private provider: 'cerebras' | 'groq', private request: typeof fetch = fetch) {}
+  private rateLimitUntil = 0;
+  constructor(private key: string, private model: string, private provider: 'cerebras' | 'groq' | 'openai', private request: typeof fetch = fetch) {}
+  availableAt() { return this.rateLimitUntil; }
   private async ask<T>(shape: Shape, schema: object, state: object, signal: AbortSignal): Promise<T> {
     signal.throwIfAborted();
-    const endpoint = this.provider === 'cerebras' ? 'https://api.cerebras.ai/v1/chat/completions' : 'https://api.groq.com/openai/v1/chat/completions';
+    const endpoint = this.provider === 'cerebras' ? 'https://api.cerebras.ai/v1/chat/completions'
+      : this.provider === 'groq' ? 'https://api.groq.com/openai/v1/chat/completions'
+      : 'https://api.openai.com/v1/chat/completions';
+    const body = JSON.stringify({ model: this.model, stream: false, reasoning_effort: 'none', max_completion_tokens: shape === 'compose' ? 600 : 180,
+      messages: [{ role: 'user', content: JSON.stringify(state) }],
+      response_format: { type: 'json_schema', json_schema: { name: `flick_${shape}`, strict: true, schema } } });
     let response: Response;
     try { response = await this.request(endpoint, {
       method: 'POST', redirect: 'error',
       headers: { Authorization: `Bearer ${this.key}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: this.model, stream: false, reasoning_effort: 'none', max_completion_tokens: shape === 'compose' ? 600 : 180,
-        messages: [{ role: 'user', content: JSON.stringify(state) }],
-        response_format: { type: 'json_schema', json_schema: { name: `flick_${shape}`, strict: true, schema } } }),
+      body,
       signal: AbortSignal.any([signal, AbortSignal.timeout(12000)]),
     }); } catch {
       signal.throwIfAborted();
       throw new TextHelperUnavailableError(`${this.provider} ${shape} request timed out or could not connect`);
     }
-    if (!response.ok) throw new TextHelperUnavailableError(`${this.provider} ${shape} returned HTTP ${response.status}`);
+    if (!response.ok) {
+      const retry = response.status === 429 ? retryAfterMs(response) : undefined;
+      if (response.status === 429) this.rateLimitUntil = Date.now() + (retry ?? 30_000);
+      throw new TextHelperUnavailableError(`${this.provider} ${shape} returned HTTP ${response.status}`, 1,
+        response.status, retry);
+    }
+    if (this.provider === 'groq') {
+      const remaining = Number(response.headers.get('x-ratelimit-remaining-tokens'));
+      const reset = durationMs(response.headers.get('x-ratelimit-reset-tokens'));
+      const nextRequestEstimate = Math.ceil(body.length * 0.3) + 250;
+      this.rateLimitUntil = Number.isFinite(remaining) && remaining < nextRequestEstimate && reset !== undefined
+        ? Date.now() + reset : 0;
+    }
     try {
       const result = z.object({ choices: z.array(z.object({ message: z.object({ content: z.string() }) })).min(1) }).parse(await response.json());
       return JSON.parse(result.choices[0].message.content) as T;
@@ -42,11 +86,11 @@ export class FastTextHelper implements TextHelper {
       field: { id: field.id, name: field.name, role: field.role, context: field.context, currentValue: field.value, multiline: field.multiline,
         inputType: field.inputType, required: field.required, min: field.min, max: field.max },
       form: { chosenFieldId: field.id,
-        visibleFields: observation.elements.filter(e => e.actions.includes('fill') || e.actions.includes('select')).slice(0, 35)
+        visibleFields: nearbyFields(observation, field)
           .map(e => ({ id: e.id, name: e.name, role: e.role, context: e.context, inputType: e.inputType,
             required: e.required, min: e.min, max: e.max,
             currentValue: e.value === '[redacted]' ? undefined : e.value, options: e.options?.map(o => o.label).slice(0, 20) })) },
-      page: { title: observation.title, url: observation.url, text: observation.text.slice(0, 5000) },
+      page: { title: observation.title, url: observation.url, text: relevantPageText(observation, field) },
       now: { iso: new Date().toISOString(), timezone: Intl.DateTimeFormat().resolvedOptions().timeZone },
     };
     let parsed = composeResult.parse(await this.ask('compose', schema, state, signal));
@@ -87,42 +131,83 @@ export class CerebrasTextHelper extends FastTextHelper {
 export class GroqTextHelper extends FastTextHelper {
   constructor(key: string, model = 'qwen/qwen3.8-27b', request: typeof fetch = fetch) { super(key, model, 'groq', request); }
 }
+export class OpenAITextHelper extends FastTextHelper {
+  constructor(key: string, model = 'gpt-6-luna', request: typeof fetch = fetch) { super(key, model, 'openai', request); }
+}
 
 export class FallbackTextHelper implements TextHelper {
-  private primaryRetryAt = 0;
-  constructor(private primary: TextHelper, private backup: TextHelper) {}
-  async compose(input: TaskInput, observation: Observation, field: ElementInfo, signal: AbortSignal) {
-    if (Date.now() < this.primaryRetryAt) return this.backup.compose(input, observation, field, signal);
-    try { return await this.primary.compose(input, observation, field, signal); }
-    catch (primaryError) {
+  private retryAt: number[];
+  private latencyMs: Array<number | undefined>;
+  private providers: TextHelper[];
+  private successfulCalls = 0;
+  constructor(primary: TextHelper, backup: TextHelper, ...additional: TextHelper[]) {
+    this.providers = [primary, backup, ...additional];
+    this.retryAt = this.providers.map(() => 0);
+    this.latencyMs = this.providers.map(() => undefined);
+  }
+  private async run<T>(call: (provider: TextHelper) => Promise<T>, signal: AbortSignal, count: (result: T) => number) {
+    let modelCalls = 0;
+    const failures: Array<{ index: number; error: TextHelperUnavailableError }> = [];
+    const readyAt = (index: number) => Math.max(this.retryAt[index], this.providers[index].availableAt?.() ?? 0);
+    const indices = this.providers.map((_, index) => index).filter(index => readyAt(index) <= Date.now());
+    indices.sort((a, b) => (this.latencyMs[a] ?? 400 + a * 50) - (this.latencyMs[b] ?? 400 + b * 50));
+    if (this.successfulCalls > 0 && this.successfulCalls % 4 === 0) {
+      const probe = indices.find(index => this.latencyMs[index] === undefined);
+      if (probe !== undefined) indices.unshift(...indices.splice(indices.indexOf(probe), 1));
+    }
+    for (const index of indices) {
       signal.throwIfAborted();
-      this.primaryRetryAt = Date.now() + 30_000;
-      const primaryCalls = primaryError instanceof TextHelperUnavailableError ? primaryError.modelCalls : 1;
+      const started = performance.now();
       try {
-        const answer = await this.backup.compose(input, observation, field, signal);
-        return { ...answer, modelCalls: primaryCalls + (answer.modelCalls ?? 1) };
-      } catch (backupError) {
+        const result = await call(this.providers[index]);
+        modelCalls += count(result);
+        this.retryAt[index] = 0;
+        const elapsed = performance.now() - started;
+        this.latencyMs[index] = this.latencyMs[index] === undefined ? elapsed : this.latencyMs[index]! * 0.75 + elapsed * 0.25;
+        this.successfulCalls++;
+        return { result, modelCalls };
+      } catch (error) {
         signal.throwIfAborted();
-        const backupCalls = backupError instanceof TextHelperUnavailableError ? backupError.modelCalls : 1;
-        const primaryReason = primaryError instanceof TextHelperUnavailableError ? primaryError.message : 'primary text helper failed';
-        const backupReason = backupError instanceof TextHelperUnavailableError ? backupError.message : 'backup text helper failed';
-        throw new TextHelperUnavailableError(`${primaryReason}; ${backupReason}`, primaryCalls + backupCalls);
+        const unavailable = error instanceof TextHelperUnavailableError ? error
+          : new TextHelperUnavailableError('text helper failed', 1);
+        modelCalls += unavailable.modelCalls;
+        failures.push({ index, error: unavailable });
+        this.retryAt[index] = Date.now() + (unavailable.status === 429 ? unavailable.retryAfterMs ?? 30_000 : 30_000);
       }
     }
+    const soonestIndex = this.providers.map((_, index) => index).sort((a, b) => readyAt(a) - readyAt(b))[0];
+    const waitMs = readyAt(soonestIndex) - Date.now();
+    if (waitMs >= 0 && waitMs <= 10_000) {
+      try {
+        await delay(waitMs, undefined, { signal });
+        const started = performance.now();
+        const result = await call(this.providers[soonestIndex]);
+        modelCalls += count(result);
+        this.retryAt[soonestIndex] = 0;
+        const elapsed = performance.now() - started;
+        this.latencyMs[soonestIndex] = this.latencyMs[soonestIndex] === undefined ? elapsed
+          : this.latencyMs[soonestIndex]! * 0.75 + elapsed * 0.25;
+        this.successfulCalls++;
+        return { result, modelCalls };
+      } catch (error) {
+        signal.throwIfAborted();
+        const unavailable = error instanceof TextHelperUnavailableError ? error
+          : new TextHelperUnavailableError('text helper failed', 1);
+        modelCalls += unavailable.modelCalls;
+        failures.push({ index: soonestIndex, error: unavailable });
+      }
+    }
+    const reasons = failures.map(f => f.error.message).join('; ');
+    const nextWait = Math.max(0, Math.ceil((Math.min(...this.providers.map((_, index) => readyAt(index))) - Date.now()) / 1000));
+    throw new TextHelperUnavailableError(reasons || `All text helpers are cooling down; next attempt in about ${nextWait}s`, modelCalls);
+  }
+  async compose(input: TaskInput, observation: Observation, field: ElementInfo, signal: AbortSignal) {
+    const { result, modelCalls } = await this.run(provider => provider.compose(input, observation, field, signal),
+      signal, answer => answer.modelCalls ?? 1);
+    return { ...result, modelCalls };
   }
   async repair(input: TaskInput, observation: Observation, history: string[], signal: AbortSignal) {
-    if (Date.now() < this.primaryRetryAt) return this.backup.repair(input, observation, history, signal);
-    try { return await this.primary.repair(input, observation, history, signal); }
-    catch (primaryError) {
-      signal.throwIfAborted();
-      this.primaryRetryAt = Date.now() + 30_000;
-      try { return await this.backup.repair(input, observation, history, signal); }
-      catch (backupError) {
-        signal.throwIfAborted();
-        const primaryReason = primaryError instanceof TextHelperUnavailableError ? primaryError.message : 'primary text helper failed';
-        const backupReason = backupError instanceof TextHelperUnavailableError ? backupError.message : 'backup text helper failed';
-        throw new TextHelperUnavailableError(`${primaryReason}; ${backupReason}`, 2);
-      }
-    }
+    const { result } = await this.run(provider => provider.repair(input, observation, history, signal), signal, () => 1);
+    return result;
   }
 }

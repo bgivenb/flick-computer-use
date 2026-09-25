@@ -193,7 +193,7 @@ export class TaskRunner {
               task.metrics.helperCalls += error instanceof Error && 'modelCalls' in error && typeof error.modelCalls === 'number' ? error.modelCalls : 1;
               signal.throwIfAborted();
               if (error instanceof TextHelperUnavailableError)
-                throw new BlockedError(`Text helper unavailable: ${error.message}. Configure another provider or supply the exact value, then continue the task.`);
+                throw new BlockedError(`Text helper unavailable: ${error.message}. Retry after the provider recovers or supply the exact value, then continue the task.`);
               throw new RecoverableActionError('the text helper could not draft this field', 'Use a supplied value or another route; the helper may be temporarily unavailable.');
             } finally { task.metrics.helperMs += performance.now() - helperStarted; }
             signal.throwIfAborted();

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { CerebrasTextHelper, FallbackTextHelper, GroqTextHelper } from '../src/providers/text-helper.js';
+import { CerebrasTextHelper, FallbackTextHelper, GroqTextHelper, OpenAITextHelper } from '../src/providers/text-helper.js';
 import { taskSchema, type Observation } from '../src/core/types.js';
 
 test('Groq helper requests strict Qwen output and validates its typed answer', async () => {
@@ -107,4 +107,110 @@ test('Cerebras 503 falls back to Groq and skips the unavailable primary on the n
   assert.equal(first.text, 'evrylo.com'); assert.equal(first.modelCalls, 2);
   assert.equal(second.text, 'evrylo.com'); assert.equal(second.modelCalls, 1);
   assert.equal(cerebrasCalls, 1); assert.equal(groqCalls, 2);
+});
+
+test('Groq 429 falls through to GPT-6 Luna with no reasoning', async () => {
+  const called: string[] = [];
+  const failingCerebras: typeof fetch = async url => { called.push(String(url)); return new Response('', { status: 503 }); };
+  const limitedGroq: typeof fetch = async url => {
+    called.push(String(url));
+    return new Response('', { status: 429, headers: { 'Retry-After': '30' } });
+  };
+  const openai: typeof fetch = async (url, init) => {
+    called.push(String(url));
+    const body = JSON.parse(String(init?.body));
+    assert.equal(body.model, 'gpt-6-luna');
+    assert.equal(body.reasoning_effort, 'none');
+    assert.equal(body.response_format.type, 'json_schema');
+    return new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ status: 'text', text: 'Cedar Harbor Studio' }) } }] }),
+      { status: 200 });
+  };
+  const helper = new FallbackTextHelper(
+    new CerebrasTextHelper('primary', 'qwen-3.8-27b', failingCerebras),
+    new GroqTextHelper('backup', 'qwen/qwen3.8-27b', limitedGroq),
+    new OpenAITextHelper('third', 'gpt-6-luna', openai));
+  const field: Observation['elements'][number] = { id: 'employer', role: 'textbox', name: 'Employer name *',
+    disabled: false, actions: ['fill'] };
+  const observation: Observation = { id: 'o', revision: 'r', sessionId: 's', kind: 'browser', title: 'Income Calculator',
+    text: 'Employer name *', elements: [field], truncated: false, capturedAt: Date.now() };
+  const input = taskSchema.parse({ sessionId: 's', goal: 'Use fictional test data', until: [{ kind: 'text', text: 'Saved' }] });
+  const result = await helper.compose(input, observation, field, new AbortController().signal);
+  assert.equal(result.text, 'Cedar Harbor Studio');
+  assert.equal(result.modelCalls, 3);
+  assert.deepEqual(called, ['https://api.cerebras.ai/v1/chat/completions',
+    'https://api.groq.com/openai/v1/chat/completions', 'https://api.openai.com/v1/chat/completions']);
+  called.length = 0;
+  await helper.compose(input, observation, field, new AbortController().signal);
+  assert.deepEqual(called, ['https://api.openai.com/v1/chat/completions']);
+});
+
+test('short Groq Retry-After gets one bounded retry when other providers fail', async () => {
+  let groqCalls = 0;
+  const unavailable: typeof fetch = async () => new Response('', { status: 503 });
+  const groq: typeof fetch = async () => {
+    groqCalls++;
+    return groqCalls === 1 ? new Response('', { status: 429, headers: { 'Retry-After': '0' } })
+      : new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ status: 'text', text: 'Example' }) } }] }),
+        { status: 200 });
+  };
+  const helper = new FallbackTextHelper(new CerebrasTextHelper('primary', undefined, unavailable),
+    new GroqTextHelper('backup', undefined, groq));
+  const field: Observation['elements'][number] = { id: 'name', role: 'textbox', name: 'Name', disabled: false, actions: ['fill'] };
+  const observation: Observation = { id: 'o', revision: 'r', sessionId: 's', kind: 'browser', title: 'Form', text: 'Name',
+    elements: [field], truncated: false, capturedAt: Date.now() };
+  const input = taskSchema.parse({ sessionId: 's', goal: 'Enter a fictional name', until: [{ kind: 'text', text: 'Saved' }] });
+  const result = await helper.compose(input, observation, field, new AbortController().signal);
+  assert.equal(result.text, 'Example');
+  assert.equal(result.modelCalls, 3);
+  assert.equal(groqCalls, 2);
+});
+
+test('Groq token-limit headers move the next field to OpenAI before a 429', async () => {
+  let groqCalls = 0, openaiCalls = 0;
+  const groq: typeof fetch = async () => {
+    groqCalls++;
+    return new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ status: 'text', text: 'First' }) } }] }),
+      { status: 200, headers: { 'x-ratelimit-remaining-tokens': '100', 'x-ratelimit-reset-tokens': '25s' } });
+  };
+  const openai: typeof fetch = async () => {
+    openaiCalls++;
+    return new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ status: 'text', text: 'Second' }) } }] }),
+      { status: 200 });
+  };
+  const helper = new FallbackTextHelper(new GroqTextHelper('primary', undefined, groq),
+    new OpenAITextHelper('backup', undefined, openai));
+  const field: Observation['elements'][number] = { id: 'name', role: 'textbox', name: 'Name', disabled: false, actions: ['fill'] };
+  const observation: Observation = { id: 'o', revision: 'r', sessionId: 's', kind: 'browser', title: 'Form', text: 'Name',
+    elements: [field], truncated: false, capturedAt: Date.now() };
+  const input = taskSchema.parse({ sessionId: 's', goal: 'Enter a fictional name', until: [{ kind: 'text', text: 'Saved' }] });
+  assert.equal((await helper.compose(input, observation, field, new AbortController().signal)).text, 'First');
+  assert.equal((await helper.compose(input, observation, field, new AbortController().signal)).text, 'Second');
+  assert.equal(groqCalls, 1);
+  assert.equal(openaiCalls, 1);
+});
+
+test('a fast healthy provider becomes preferred after one timing probe', async () => {
+  let slowCalls = 0, fastCalls = 0;
+  const slow: typeof fetch = async () => {
+    slowCalls++;
+    await new Promise(resolve => setTimeout(resolve, 20));
+    return new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ status: 'text', text: 'Slow' }) } }] }),
+      { status: 200 });
+  };
+  const fast: typeof fetch = async () => {
+    fastCalls++;
+    return new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ status: 'text', text: 'Fast' }) } }] }),
+      { status: 200 });
+  };
+  const helper = new FallbackTextHelper(new CerebrasTextHelper('primary', undefined, slow),
+    new GroqTextHelper('backup', undefined, fast));
+  const field: Observation['elements'][number] = { id: 'name', role: 'textbox', name: 'Name', disabled: false, actions: ['fill'] };
+  const observation: Observation = { id: 'o', revision: 'r', sessionId: 's', kind: 'browser', title: 'Form', text: 'Name',
+    elements: [field], truncated: false, capturedAt: Date.now() };
+  const input = taskSchema.parse({ sessionId: 's', goal: 'Enter a fictional name', until: [{ kind: 'text', text: 'Saved' }] });
+  const answers = [];
+  for (let i = 0; i < 6; i++) answers.push((await helper.compose(input, observation, field, new AbortController().signal)).text);
+  assert.deepEqual(answers, ['Slow', 'Slow', 'Slow', 'Slow', 'Fast', 'Fast']);
+  assert.equal(slowCalls, 4);
+  assert.equal(fastCalls, 2);
 });

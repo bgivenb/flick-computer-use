@@ -57,7 +57,7 @@ Run `npm run playground` and open the printed `127.0.0.1` URL. The **Talk to Jev
 
 The separate **Computer task** view sends one complete goal to Flick and displays Jev's action log. It requires an observable phrase to verify completion. The playground binds only to localhost and reads the same local TypeSafe key as the MCP server.
 
-Optionally set `CEREBRAS_API_KEY` in `.env.local` to let Jev request text for an observed field and get a recovery hint after repeated action errors. The default helper model is `qwen-3.8-27b`. `GROQ_API_KEY` is an alternative and an automatic fallback when both are configured and Cerebras fails. Jev still chooses the field and the next computer action; the text helper is not called for ordinary clicks. Exact supplied values remain available without either provider.
+Optionally set `CEREBRAS_API_KEY`, `GROQ_API_KEY`, or `OPENAI_API_KEY` in `.env.local` to let Jev request text for an observed field and get a recovery hint after repeated action errors. Flick starts with Cerebras, measures successful helper latency, and then prefers the fastest available provider. It switches before a Groq token limit when response headers show too few tokens for another request, and switches immediately on a provider error. OpenAI `gpt-6-luna` uses `reasoning_effort: none`. If all providers are unavailable, a short `Retry-After` is honored. Jev still chooses the field and the next computer action; text helpers are not called for ordinary clicks. Exact supplied values remain available without a text provider.
 
 ## Architecture
 

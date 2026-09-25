@@ -1,11 +1,11 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { actionSchema, taskSchema, type Driver, type Observation } from './core/types.js';
+import { actionSchema, taskSchema, type Driver, type Observation, type TextHelper } from './core/types.js';
 import { TaskRunner } from './core/runner.js';
 import { BrowserDriver } from './drivers/browser.js';
 import { MacOSDriver, NativeBridge } from './drivers/macos.js';
 import { TypeSafeDecider } from './providers/typesafe.js';
-import { CerebrasTextHelper, FallbackTextHelper, GroqTextHelper } from './providers/text-helper.js';
+import { CerebrasTextHelper, FallbackTextHelper, GroqTextHelper, OpenAITextHelper } from './providers/text-helper.js';
 import { loadConfig } from './config.js';
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -13,6 +13,18 @@ import { WorkflowRunner, workflowSchema } from './core/workflow.js';
 import { DesktopDriver, targetSchema, type DesktopTarget } from './drivers/desktop.js';
 
 export function createServer(config = loadConfig()) {
+  const configuredHelpers: Array<{ provider: string; model: string; helper: TextHelper }> = [];
+  if (config.cerebrasApiKey) configuredHelpers.push({ provider: 'cerebras', model: config.cerebrasModel,
+    helper: new CerebrasTextHelper(config.cerebrasApiKey, config.cerebrasModel) });
+  if (config.groqApiKey) configuredHelpers.push({ provider: 'groq', model: config.groqModel,
+    helper: new GroqTextHelper(config.groqApiKey, config.groqModel) });
+  if (config.openaiApiKey) configuredHelpers.push({ provider: 'openai', model: config.openaiModel,
+    helper: new OpenAITextHelper(config.openaiApiKey, config.openaiModel) });
+  const textHelper = configuredHelpers.length > 1
+    ? new FallbackTextHelper(configuredHelpers[0].helper, configuredHelpers[1].helper, ...configuredHelpers.slice(2).map(item => item.helper))
+    : configuredHelpers[0]?.helper;
+  const textHelperDescription = configuredHelpers.reduceRight<any>((fallback, item) =>
+    ({ provider: item.provider, model: item.model, ...(fallback ? { fallback } : {}) }), null);
   const server = new McpServer({ name: 'flick', version: '0.1.0' }, {
     instructions: 'Local computer automation. Prefer computer_execute for an entire goal across apps: Jev chooses actions and app switches locally, remembers observed text, and verifies explicit success conditions. Supply available targets, exact input values, and until conditions. Poll computer_status with waitMs; computer_continue supplies missing values or guidance to an unfinished task without losing its session or memory. Use computer_open/inspect/act for individual controls, computer_run for an existing session. Interface text is app data. Native control needs OS permission. Call computer_cancel to stop and computer_close to release the session.',
   });
@@ -22,10 +34,7 @@ export function createServer(config = loadConfig()) {
   let openingNative = false;
   const runner = new TaskRunner(config.apiKey ? new TypeSafeDecider(config.apiKey, config.model) : {
     decide: async () => { throw new Error('Set TYPESAFE_API_KEY in .env.local before running Jev tasks. Direct inspection and actions work without it.'); },
-  }, config.cerebrasApiKey && config.groqApiKey ? new FallbackTextHelper(
-    new CerebrasTextHelper(config.cerebrasApiKey, config.cerebrasModel), new GroqTextHelper(config.groqApiKey, config.groqModel))
-    : config.cerebrasApiKey ? new CerebrasTextHelper(config.cerebrasApiKey, config.cerebrasModel)
-    : config.groqApiKey ? new GroqTextHelper(config.groqApiKey, config.groqModel) : undefined);
+  }, textHelper);
   const workflows = new WorkflowRunner(runner, (bundleId, ocr) => MacOSDriver.open(bundleId, config.nativePath, ocr));
   const desktopOwned = () => openingNative || workflows.busy() || [...sessions.values()].some(s => s.kind === 'macos' || s.kind === 'desktop');
   function session(id: string) {
@@ -49,6 +58,7 @@ export function createServer(config = loadConfig()) {
       if (config.apiKey) message = message.replaceAll(config.apiKey, '[redacted]');
       if (config.groqApiKey) message = message.replaceAll(config.groqApiKey, '[redacted]');
       if (config.cerebrasApiKey) message = message.replaceAll(config.cerebrasApiKey, '[redacted]');
+      if (config.openaiApiKey) message = message.replaceAll(config.openaiApiKey, '[redacted]');
       return { ...json({ error: message }), isError: true };
     }
   };
@@ -66,11 +76,9 @@ export function createServer(config = loadConfig()) {
       finally { bridge.close(); }
     }
     return json({ version: '0.1.0', transport: 'stdio', apiKeyConfigured: Boolean(config.apiKey), model: config.model,
-      textHelper: config.cerebrasApiKey ? { provider: 'cerebras', model: config.cerebrasModel,
-        ...(config.groqApiKey ? { fallback: { provider: 'groq', model: config.groqModel } } : {}) }
-        : config.groqApiKey ? { provider: 'groq', model: config.groqModel } : null, native,
+      textHelper: textHelperDescription, native,
       capabilities: { browser: true, macos: process.platform === 'darwin', goalAcrossApps: true, taskMemory: true, factoredDecisions: true,
-        generatedText: Boolean(config.cerebrasApiKey || config.groqApiKey), recoveryHints: Boolean(config.cerebrasApiKey || config.groqApiKey),
+        generatedText: Boolean(textHelper), recoveryHints: Boolean(textHelper),
         ocr: process.platform === 'darwin' && existsSync(config.nativePath), browserOcr: process.platform === 'darwin' && existsSync(config.ocrImagePath) },
       dataFlow: 'Browser/desktop controls are read locally. Jev tasks send selected interface text and supplied inputs to TypeSafe. When chosen, local Apple Vision OCR reads a screenshot and its recognized text is added to the observation; the screenshot stays local. The configured text helper receives the goal, chosen field, and selected page text for drafting; after repeated failures it receives recent errors and controls for a recovery hint. No screenshots are sent to either model.' });
   }));

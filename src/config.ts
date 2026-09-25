@@ -16,6 +16,8 @@ export function loadConfig() {
     groqModel: process.env.GROQ_MODEL || 'qwen/qwen3.8-27b',
     cerebrasApiKey: process.env.CEREBRAS_API_KEY,
     cerebrasModel: process.env.CEREBRAS_MODEL || 'qwen-3.8-27b',
+    openaiApiKey: process.env.OPENAI_API_KEY,
+    openaiModel: process.env.OPENAI_MODEL || 'gpt-6-luna',
     localDir,
     nativePath: resolve(root, '.local/bin/jev-macos'),
     ocrImagePath: resolve(root, '.local/bin/flick-ocr-image'),

@@ -111,7 +111,7 @@ export class RecoverableActionError extends Error {
 }
 export class BlockedError extends Error {}
 export class TextHelperUnavailableError extends Error {
-  constructor(message: string, readonly modelCalls = 1) { super(message); }
+  constructor(message: string, readonly modelCalls = 1, readonly status?: number, readonly retryAfterMs?: number) { super(message); }
 }
 // description names the whole action for logs; label names only its target for a Choice option.
 export type Candidate = { action: Action | 'blocked' | 'done'; description: string; label?: string };
@@ -129,6 +129,7 @@ export interface Decider {
     history: string[], signal: AbortSignal, context?: DecisionContext): Promise<Decision>;
 }
 export interface TextHelper {
+  availableAt?(): number;
   compose(input: TaskInput, observation: Observation, field: ElementInfo, signal: AbortSignal): Promise<{ status: 'text' | 'need_input'; text: string; modelCalls?: number }>;
   repair(input: TaskInput, observation: Observation, history: string[], signal: AbortSignal): Promise<string>;
 }
