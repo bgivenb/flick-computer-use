@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Flick · Jev playground</title>
+  <style>
+    :root { color-scheme: dark; font: 15px/1.45 system-ui, -apple-system, sans-serif; background: #0d1017; color: #edf0f7; }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; }
+    main { max-width: 920px; margin: 0 auto; padding: 28px 22px 60px; }
+    header { display: flex; align-items: center; justify-content: space-between; gap: 20px; margin-bottom: 24px; }
+    h1 { font-size: 27px; letter-spacing: -.04em; margin: 0; }
+    h1 span { color: #8a98af; font-weight: 400; }
+    h2 { font-size: 18px; margin: 0 0 8px; }
+    p { color: #aeb8c9; margin: 0 0 18px; }
+    small, .hint { color: #8f9cb2; }
+    .badge { border: 1px solid #384456; border-radius: 100px; padding: 6px 10px; color: #b9c7da; white-space: nowrap; }
+    .tabs { display: flex; gap: 6px; border-bottom: 1px solid #293140; margin-bottom: 22px; }
+    .tabs button { background: none; border: 0; border-bottom: 2px solid transparent; border-radius: 0; color: #9daac0; padding: 11px 15px; cursor: pointer; }
+    .tabs button.active { color: #fff; border-bottom-color: #8b96ff; }
+    section[hidden] { display: none; }
+    .feed { min-height: 190px; max-height: 45vh; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; padding: 12px 0 22px; }
+    .bubble { padding: 13px 15px; border: 1px solid #30394a; background: #171d29; border-radius: 13px; max-width: 92%; overflow-wrap: anywhere; }
+    .bubble.user { align-self: flex-end; background: #253152; border-color: #41517b; }
+    .bubble.system { color: #b7c5d8; }
+    .bubble strong { display: block; color: #f1f4fb; margin-bottom: 4px; }
+    .bubble pre { white-space: pre-wrap; overflow-wrap: anywhere; margin: 6px 0 0; font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .card { background: #151b26; border: 1px solid #2d3646; border-radius: 17px; padding: 20px; }
+    label { display: block; font-weight: 600; margin: 14px 0 6px; }
+    label:first-child { margin-top: 0; }
+    textarea, input, select { width: 100%; background: #0e141e; color: #f1f4fb; border: 1px solid #3a4659; border-radius: 9px; padding: 10px 12px; font: inherit; }
+    textarea { resize: vertical; min-height: 78px; }
+    textarea:focus, input:focus, select:focus, button:focus-visible { outline: 2px solid #8b96ff; outline-offset: 2px; }
+    button { border: 1px solid #5c69d7; background: #6672df; color: white; border-radius: 9px; padding: 10px 16px; font: inherit; font-weight: 650; cursor: pointer; }
+    button:hover { filter: brightness(1.1); }
+    button:disabled { opacity: .55; cursor: wait; }
+    button.secondary { background: #242d3c; border-color: #414c60; }
+    .row { display: flex; gap: 12px; align-items: flex-end; }
+    .row > * { flex: 1; }
+    .actions { display: flex; gap: 8px; margin-top: 16px; }
+    details { border-top: 1px solid #30394a; margin-top: 18px; padding-top: 13px; }
+    summary { color: #b9c5d6; cursor: pointer; }
+    .result { margin-top: 12px; }
+    .bar { display: flex; align-items: center; gap: 10px; margin: 5px 0; }
+    .bar span:first-child { min-width: 100px; }
+    .track { height: 7px; background: #2e394b; border-radius: 8px; flex: 1; overflow: hidden; }
+    .track i { display: block; height: 100%; background: #9ca5ff; }
+    .bar b { min-width: 48px; text-align: right; font-size: 12px; }
+    .error { color: #ffabb5; }
+    .subtle { color: #9eabc0; font-size: 13px; }
+    @media(max-width: 600px) { main { padding: 18px 14px 40px; } .row { display: block; } header { align-items: flex-start; } .badge { font-size: 12px; } }
+  </style>
+</head>
+<body>
+<main>
+  <header><h1>Flick <span>/ Jev playground</span></h1><div class="badge" id="health">Checking local setup…</div></header>
+  <nav class="tabs" aria-label="Playground modes">
+    <button id="tab-jev" class="active" type="button">Talk to Jev</button>
+    <button id="tab-task" type="button">Computer task</button>
+  </nav>
+
+  <section id="jev-panel">
+    <h2>Test Jev directly</h2>
+    <p>Give Jev some input and a question. Leave options empty for a yes/no probability, or list choices to see Jev select one. Each send is an independent test; nothing on your computer is controlled here.</p>
+    <div id="jev-feed" class="feed" aria-live="polite"><div class="bubble system">Jev returns typed judgments and probabilities, not free-form chat text. The exact request and response are available under each answer.</div></div>
+    <form id="jev-form" class="card">
+      <label for="state">Input / context</label>
+      <textarea id="state" placeholder="Paste a message, document excerpt, app state, or any text you want Jev to judge."></textarea>
+      <label for="question">Question for Jev</label>
+      <input id="question" placeholder="Does this message sound urgent?">
+      <label for="options">Options <small>(optional; one per line, use name | description)</small></label>
+      <textarea id="options" placeholder="Leave empty for yes/no, or try:\nbilling | Payments and invoices\ntechnical | Bugs and integrations\nsales | Pricing and new accounts" style="min-height:68px"></textarea>
+      <details><summary>Raw TypeSafe request JSON</summary><p class="subtle">If filled, this replaces the fields above so you can test Choice, Noul, Score, or several questions at once. The local server supplies your configured Jev model.</p><textarea id="raw" placeholder='{"state":"...","questions":{"answer":{"type":"noul","instructions":"..."}}}' style="min-height:120px"></textarea></details>
+      <div class="actions"><button id="ask" type="submit">Ask Jev</button></div>
+    </form>
+  </section>
+
+  <section id="task-panel" hidden>
+    <h2>Give Flick a computer goal</h2>
+    <p>One goal starts one autonomous Flick task. Jev chooses the actions; this page shows the live action log. No task runs until you press Run.</p>
+    <div id="task-feed" class="feed" aria-live="polite"><div class="bubble system">Choose a target, describe the goal, and give a short exact phrase the interface should show when it is done.</div></div>
+    <form id="task-form" class="card">
+      <div class="row"><div><label for="target">Target</label><select id="target"><option value="mac">Visible Mac app</option><option value="browser">Existing Chrome (fast)</option></select></div>
+        <div id="bundle-wrap"><label for="bundle">Mac app bundle ID</label><input id="bundle" value="com.google.Chrome"></div>
+        <div id="url-wrap" hidden><label for="url">Starting URL</label><input id="url" type="url" placeholder="https://example.com/"></div></div>
+      <label for="goal">What should Jev do?</label><textarea id="goal" placeholder="Describe the overall result, not a click-by-click plan." required></textarea>
+      <label for="done">Done when visible text contains</label><input id="done" placeholder="An exact phrase shown after completion" required>
+      <label for="values">Exact text or values to type <small>(optional)</small></label><textarea id="values" placeholder='Plain text, or JSON such as {"post":"...","date":"9/26/2026"}' style="min-height:68px"></textarea>
+      <div class="actions"><button id="run" type="submit">Run with Flick</button><button id="stop" type="button" class="secondary" disabled>Stop</button></div>
+      <details id="continue-wrap" hidden><summary>Continue a stopped task</summary><label for="guidance">Your guidance</label><textarea id="guidance" placeholder="Give missing context or a new constraint. Jev will still choose the actions."></textarea><label for="more-values">Additional exact values</label><textarea id="more-values" placeholder="Plain text or JSON" style="min-height:60px"></textarea><div class="actions"><button id="continue" type="button">Continue</button></div></details>
+    </form>
+  </section>
+</main>
+<script>
+  const $ = id => document.getElementById(id);
+  const jevFeed = $('jev-feed'), taskFeed = $('task-feed');
+  const bubble = (feed, who, content, kind = '') => {
+    const item = document.createElement('div'); item.className = 'bubble ' + kind;
+    const title = document.createElement('strong'); title.textContent = who; item.append(title);
+    if (typeof content === 'string') { const text = document.createElement('div'); text.textContent = content; item.append(text); }
+    else item.append(content);
+    feed.append(item); feed.scrollTop = feed.scrollHeight; return item;
+  };
+  async function api(path, data) {
+    const response = await fetch(path, { method: data === undefined ? 'GET' : 'POST', headers: data === undefined ? {} : { 'Content-Type': 'application/json' }, body: data === undefined ? undefined : JSON.stringify(data) });
+    const value = await response.json();
+    if (!response.ok) throw Error(value.error || `HTTP ${response.status}`);
+    return value;
+  }
+  function show(tab) {
+    $('jev-panel').hidden = tab !== 'jev'; $('task-panel').hidden = tab !== 'task';
+    $('tab-jev').classList.toggle('active', tab === 'jev'); $('tab-task').classList.toggle('active', tab === 'task');
+  }
+  $('tab-jev').onclick = () => show('jev'); $('tab-task').onclick = () => show('task');
+  api('/api/health').then(x => $('health').textContent = `${x.keyConfigured ? 'Key ready' : 'Add key to .env.local'} · ${x.model}`).catch(e => $('health').textContent = e.message);
+  $('jev-form').addEventListener('submit', async event => {
+    event.preventDefault(); $('ask').disabled = true;
+    const payload = { state: $('state').value, question: $('question').value, options: $('options').value, raw: $('raw').value };
+    bubble(jevFeed, 'You', payload.raw.trim() ? 'Raw request' : `${payload.question}\n\nInput: ${payload.state}`, 'user');
+    try {
+      const result = await api('/api/jev', payload);
+      const answer = Object.values(result.output.answers || {})[0];
+      const content = document.createElement('div');
+      const headline = document.createElement('div');
+      if (answer?.type === 'choice') headline.textContent = `Choice: ${answer.choice} · confidence ${Math.round(answer.confidence * 100)}%`;
+      else if (answer?.type === 'noul') headline.textContent = `Yes probability: ${Math.round(answer.noul * 100)}%`;
+      else if (answer?.type === 'score') headline.textContent = `Score: ${answer.score} · confidence ${Math.round(answer.confidence * 100)}%`;
+      else headline.textContent = 'Typed response received';
+      content.append(headline);
+      if (answer?.probabilities) for (const [name, probability] of Object.entries(answer.probabilities).sort((a,b) => b[1]-a[1])) {
+        const row = document.createElement('div'); row.className = 'bar';
+        const label = document.createElement('span'); label.textContent = name;
+        const track = document.createElement('div'); track.className = 'track'; const fill = document.createElement('i'); fill.style.width = `${Math.round(probability * 100)}%`; track.append(fill);
+        const percent = document.createElement('b'); percent.textContent = `${Math.round(probability * 100)}%`;
+        row.append(label, track, percent); content.append(row);
+      }
+      const timing = document.createElement('div'); timing.className = 'subtle'; timing.textContent = `${result.elapsedMs} ms · ${result.output.model || 'Jev'}`; content.append(timing);
+      const details = document.createElement('details'); const summary = document.createElement('summary'); summary.textContent = 'Exact request and response';
+      const pre = document.createElement('pre'); pre.textContent = JSON.stringify({ request: result.sent, response: result.output }, null, 2); details.append(summary, pre); content.append(details);
+      bubble(jevFeed, 'Jev', content);
+    } catch (error) { bubble(jevFeed, 'Error', error.message, 'error'); }
+    finally { $('ask').disabled = false; }
+  });
+
+  $('target').onchange = () => { const browser = $('target').value === 'browser'; $('url-wrap').hidden = !browser; $('bundle-wrap').hidden = browser; };
+  let currentTask, seen = 0, ended = false, polling = false;
+  async function poll() {
+    if (!currentTask || polling) return; polling = true;
+    try {
+      const status = await api('/api/task');
+      if (!status) return;
+      for (const event of (status.events || []).slice(seen)) bubble(taskFeed, `Jev · step ${event.step}`, `${event.action}${event.effect ? '\n' + event.effect : ''}`);
+      seen = (status.events || []).length;
+      if (status.status !== 'running' && !ended) {
+        ended = true; $('run').disabled = false; $('stop').disabled = true;
+        $('continue-wrap').hidden = status.status === 'succeeded';
+        bubble(taskFeed, status.status, `${status.reason || ''}\n${status.steps} actions · ${(status.metrics?.elapsedMs / 1000 || 0).toFixed(2)} s`);
+      }
+    } catch (error) { bubble(taskFeed, 'Error', error.message, 'error'); }
+    finally { polling = false; }
+  }
+  setInterval(() => { if (currentTask && !ended) void poll(); }, 500);
+  $('task-form').addEventListener('submit', async event => {
+    event.preventDefault(); $('run').disabled = true; $('continue-wrap').hidden = true;
+    const data = { target: $('target').value, bundleId: $('bundle').value, url: $('url').value,
+      goal: $('goal').value, doneText: $('done').value, values: $('values').value };
+    try {
+      const started = await api('/api/task/start', data);
+      currentTask = started.id; seen = 0; ended = false; taskFeed.replaceChildren();
+      bubble(taskFeed, 'You', data.goal, 'user'); bubble(taskFeed, 'Flick', 'Running one goal. Jev is choosing the actions.');
+      $('stop').disabled = false; void poll();
+    } catch (error) { $('run').disabled = false; bubble(taskFeed, 'Error', error.message, 'error'); }
+  });
+  $('stop').onclick = async () => { try { await api('/api/task/stop', {}); bubble(taskFeed, 'Flick', 'Stop requested.'); } catch (error) { bubble(taskFeed, 'Error', error.message, 'error'); } };
+  $('continue').onclick = async () => {
+    $('continue').disabled = true;
+    try {
+      const guidance = $('guidance').value, values = $('more-values').value;
+      const started = await api('/api/task/continue', { guidance, values });
+      currentTask = started.id; seen = 0; ended = false; $('continue-wrap').hidden = true; $('run').disabled = true; $('stop').disabled = false;
+      bubble(taskFeed, 'You', guidance || 'Continue with additional values', 'user'); void poll();
+    } catch (error) { bubble(taskFeed, 'Error', error.message, 'error'); }
+    finally { $('continue').disabled = false; }
+  };
+</script>
+</body>
+</html>

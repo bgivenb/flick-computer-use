@@ -51,6 +51,12 @@ Merge the generated `flick` entry into your MCP client's configuration. It launc
 
 For your signed-in Chrome on macOS, use `connection: "existing-chrome"`. Enable remote debugging at `chrome://inspect/#remote-debugging`, then approve Chrome's connection prompt. Flick owns a task tab and disconnects without closing your browser. The default mode uses a dedicated Playwright profile. [Chrome connection documentation](https://developer.chrome.com/docs/devtools/agents/use-cases/auto-connect)
 
+## Optional local playground
+
+Run `npm run playground` and open the printed `127.0.0.1` URL. The **Talk to Jev** view sends your own state, question, and optional choices directly to TypeSafe through a local server. It shows the exact request, typed answer, probabilities, and timing without controlling your computer. Leave choices empty for a yes/no probability; use the raw JSON field for Score or several questions. Jev is a decision model, so this is a chat-style test bench rather than a text-generating chatbot.
+
+The separate **Computer task** view sends one complete goal to Flick and displays Jev's action log. It requires an observable phrase to verify completion. The playground binds only to localhost and reads the same local TypeSafe key as the MCP server.
+
 ## Architecture
 
 ```text

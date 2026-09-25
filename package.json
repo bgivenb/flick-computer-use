@@ -30,6 +30,7 @@
     "demo:run": "tsx scripts/demo-run.ts",
     "demo:bench": "tsx scripts/demo-run.ts --headless --runs=6",
     "demo:record": "tsx scripts/demo-run.ts --record --countdown=4",
+    "playground": "npm run build --silent && tsx scripts/playground.ts",
     "setup": "node scripts/setup-agent.mjs",
     "setup:agent": "node scripts/setup-agent.mjs",
     "mcp:config": "node scripts/mcp-config.mjs"
