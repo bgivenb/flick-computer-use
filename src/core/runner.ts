@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { performance } from 'node:perf_hooks';
 import { setTimeout as delay } from 'node:timers/promises';
-import { BlockedError, candidatesFor, RecoverableActionError, StaleObservationError, verify, type Action, type Condition, type Decider, type DecisionTrace, type Driver, type Observation, type TaskInput } from './types.js';
+import { BlockedError, candidatesFor, RecoverableActionError, StaleObservationError, verify, type Action, type Condition, type Decider, type DecisionTrace, type Driver, type Observation, type TaskInput, type TextHelper } from './types.js';
 import { describeCondition, describeEffect, focusView, progressDigest } from './scene.js';
 
 export type Status = 'running' | 'succeeded' | 'blocked' | 'failed' | 'cancelled' | 'timed_out';
@@ -10,7 +10,7 @@ export interface Task {
   steps: number; reason?: string; verification?: ReturnType<typeof verify>;
   request: { goal: string; until: Condition[]; inputNames: string[] };
   lastDecision?: { action: string; confidence: number; probability: number };
-  metrics: { elapsedMs: number; observeMs: number; decisionMs: number; executionMs: number; modelCalls: number; staleRetries: number; actionRecoveries: number };
+  metrics: { elapsedMs: number; observeMs: number; decisionMs: number; executionMs: number; modelCalls: number; helperCalls: number; helperMs: number; staleRetries: number; actionRecoveries: number };
   events: Array<{ step: number; action: string; confidence?: number; durationMs: number; effect?: string }>;
   trace: Array<DecisionTrace & { step: number; latencyMs: number; elements: number }>;
   lastObservation?: Observation;
@@ -24,14 +24,14 @@ export class TaskRunner {
   private completions = new Map<string, Promise<void>>();
   private owners = new Map<string, string>();
   private inputs = new Map<string, TaskInput>();
-  constructor(private decider: Decider) {}
+  constructor(private decider: Decider, private textHelper?: TextHelper) {}
   busy(sessionId: string) { return this.owners.has(sessionId); }
   start(driver: Driver, input: TaskInput) {
     if (this.busy(driver.id)) throw new Error('A task is already running in this session. Cancel it or wait.');
     this.prune();
     const task: Task = { id: randomUUID(), sessionId: driver.id, status: 'running', startedAt: Date.now(), steps: 0,
       request: { goal: input.goal, until: structuredClone(input.until), inputNames: Object.keys(input.inputs) },
-      metrics: { elapsedMs: 0, observeMs: 0, decisionMs: 0, executionMs: 0, modelCalls: 0, staleRetries: 0, actionRecoveries: 0 }, events: [], trace: [] };
+      metrics: { elapsedMs: 0, observeMs: 0, decisionMs: 0, executionMs: 0, modelCalls: 0, helperCalls: 0, helperMs: 0, staleRetries: 0, actionRecoveries: 0 }, events: [], trace: [] };
     const controller = new AbortController();
     this.tasks.set(task.id, task);
     this.inputs.set(task.id, structuredClone(input));
@@ -97,6 +97,7 @@ export class TaskRunner {
     const attempts = new Map<string, number>(), futile = new Map<string, number>();
     const failed = new Map<string, { count: number; step: number }>();
     let idle = 0, staleStreak = 0;
+    let repairCount = 0;
     let pending: Observation | undefined;
     let previous: { action: Action; key: string; description: string; before: Observation; digest: string; event: Task['events'][number] } | undefined;
     let clipboardStart: number | undefined;
@@ -129,7 +130,7 @@ export class TaskRunner {
         const inputs = { ...input.inputs, ...Object.fromEntries((observation.memory ?? []).map(f => [`memory:${f.key} (${f.source})`, f.value])) };
         const view = focusView(observation, `${input.goal} ${Object.keys(input.inputs).join(' ')}`);
         const surface = JSON.stringify(view.elements.map(e => [e.id, e.actions]));
-        const candidates = candidatesFor(view, inputs, { factored: this.decider.factored });
+        const candidates = candidatesFor(view, inputs, { factored: this.decider.factored, canCompose: Boolean(this.textHelper) });
         const withdrawn: string[] = [], unavailable: string[] = [];
         for (const [key, candidate] of Object.entries(candidates)) {
           if (typeof candidate.action === 'string') continue;
@@ -169,7 +170,24 @@ export class TaskRunner {
         const signature = `${digest}|${key}`;
         if ((attempts.get(signature) ?? 0) >= 2) throw new BlockedError('Repeated the same action on the same state without completing the task.');
         t = performance.now();
-        try { pending = await driver.act(selected.action, observation, signal) ?? undefined; }
+        try {
+          const action = selected.action;
+          if (action.kind === 'compose') {
+            const field = observation.elements.find(e => e.id === action.elementId);
+            if (!field || field.disabled || !field.actions.includes('fill')) throw new StaleObservationError();
+            const helperStarted = performance.now();
+            task.metrics.helperCalls++;
+            let draft: Awaited<ReturnType<TextHelper['compose']>>;
+            try { draft = await this.textHelper!.compose(input, observation, field, signal); }
+            catch (error) {
+              signal.throwIfAborted();
+              throw new RecoverableActionError('the text helper could not draft this field', 'Use a supplied value or another route; the helper may be temporarily unavailable.');
+            } finally { task.metrics.helperMs += performance.now() - helperStarted; }
+            signal.throwIfAborted();
+            if (draft.status === 'need_input') throw new BlockedError(`The field ${JSON.stringify(field.name)} needs an exact value the task has not supplied.`);
+            pending = await driver.act({ kind: 'fill', elementId: field.id, value: draft.text }, observation, signal) ?? undefined;
+          } else pending = await driver.act(action, observation, signal) ?? undefined;
+        }
         catch (error) {
           // A stale target is re-observed and re-decided. Only a streak of them means the interface is unusable.
           if (error instanceof StaleObservationError && staleStreak++ < 3) { task.metrics.staleRetries++; continue; }
@@ -183,6 +201,17 @@ export class TaskRunner {
             const effect = `${error.message} ${error.guidance}`;
             task.events.push({ step: task.steps, action: selected.description, confidence: decision.confidence, durationMs, effect });
             history.push(`${selected.description} → ${effect}`);
+            if (this.textHelper && task.metrics.actionRecoveries >= 2 && repairCount < 2) {
+              repairCount++;
+              const helperStarted = performance.now();
+              task.metrics.helperCalls++;
+              try {
+                const current = await driver.observe();
+                const hint = await this.textHelper.repair(input, current, history, signal);
+                if (hint) history.push(`Text helper recovery hint: ${hint}`);
+              } catch { signal.throwIfAborted(); }
+              finally { task.metrics.helperMs += performance.now() - helperStarted; }
+            }
             staleStreak = 0;
             continue;
           }
@@ -210,6 +239,7 @@ export class TaskRunner {
       task.metrics.elapsedMs = Math.round(performance.now() - started);
       task.metrics.observeMs = Math.round(task.metrics.observeMs);
       task.metrics.executionMs = Math.round(task.metrics.executionMs);
+      task.metrics.helperMs = Math.round(task.metrics.helperMs);
       this.owners.delete(driver.id);
       this.controllers.delete(task.id);
     }

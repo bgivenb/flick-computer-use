@@ -12,6 +12,8 @@ export function loadConfig() {
   return {
     apiKey: process.env.TYPESAFE_API_KEY,
     model: process.env.TYPESAFE_MODEL || 'jev-latest',
+    groqApiKey: process.env.GROQ_API_KEY,
+    groqModel: process.env.GROQ_MODEL || 'qwen/qwen3.8-27b',
     localDir,
     nativePath: resolve(root, '.local/bin/jev-macos'),
   };

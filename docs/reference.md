@@ -65,7 +65,7 @@ Use `computer_cancel` and wait for a terminal status before closing a busy sessi
 
 This is a schema example; the app must actually expose the indicated source, destination, and success evidence. The demo does not implement this transfer form. For real tasks, choose conditions that verify the destination values as well as a saved message.
 
-Jev can remember exact observed text and reuse it in another app. Memory is bounded to 12 facts of up to 10,000 characters. `field_from_memory` compares a destination field with an exact remembered source. Free-form text generation and arbitrary transformations remain host responsibilities.
+Jev can remember exact observed text and reuse it in another app. Memory is bounded to 12 facts of up to 10,000 characters. `field_from_memory` compares a destination field with an exact remembered source. With `GROQ_API_KEY` configured, Jev can choose `compose` for an observed editable field; Qwen drafts the text, and Flick fills only that same observed field. If the needed personal or account fact is missing, the helper can request an exact input. After two recoverable action failures, Qwen may add a short recovery hint to Jev's history; it does not execute an action or change the user's goal.
 
 `computer_workflow` is a separate convenience for a caller-specified sequence of native stages. Mixed browser/native stage plans have not been added to that tool.
 
@@ -103,7 +103,7 @@ One native session owns the desktop at a time, including between app switches an
 
 Credentials load from ignored `.env.local`; `JEV_ENV_FILE` selects another file and `JEV_DATA_DIR` selects a local data directory. Never include credentials in MCP config, benchmark reports, or source commits.
 
-Jev receives the goal, supplied inputs, selected interface text and controls, memory, and recent effects. Standard password/OTP values are redacted, but ordinary page text is not comprehensively scrubbed of personal information. Task events and traces can contain typed values. Automatic privacy-preserving trace export is not implemented.
+Jev receives the goal, supplied inputs, selected interface text and controls, memory, and recent effects. When configured and chosen, Groq receives the goal, selected field, supplied inputs, and up to 5,000 characters of page text for drafting. For recovery it receives recent errors and up to 3,000 characters of page text plus visible controls. Standard password/OTP values are redacted from observations, but ordinary page text is not comprehensively scrubbed of personal information. Task events and traces can contain typed values. Automatic privacy-preserving trace export is not implemented.
 
 The bundled demo persists reports only for its synthetic data. The server otherwise retains bounded task history in process memory. Restarting the MCP does not automatically replay unfinished writes.
 
@@ -112,7 +112,7 @@ The bundled demo persists reports only for its synthetic data. The server otherw
 | Path | Responsibility |
 | --- | --- |
 | `src/core/` | Task loop, observations/actions, scenes, memory coordination |
-| `src/providers/` | TypeSafe decisions and bounded repair |
+| `src/providers/` | TypeSafe decisions and optional Groq drafting/recovery hints |
 | `src/drivers/` | DOM and native adapters |
 | `src/server.ts` | MCP tool contracts |
 | `native/` | Swift helper |

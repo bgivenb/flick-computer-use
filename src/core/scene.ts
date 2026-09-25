@@ -84,7 +84,8 @@ export function describeEffect(before: Observation, after: Observation, action: 
   const id = 'elementId' in action ? action.elementId : undefined;
   const prior = id ? before.elements.find(e => e.id === id) : undefined;
   const now = id ? after.elements.find(e => e.id === id) : undefined;
-  if (action.kind === 'fill' && !(action.submit && notes.length)) notes.push(!now ? 'the field is no longer visible' : now.value === action.value ? 'the field holds the value' : `the field holds ${JSON.stringify((now.value ?? '').slice(0, 60))}`);
+  if (action.kind === 'compose') notes.push(!now ? 'the drafted field is no longer visible' : prior?.value !== now.value ? 'the field holds drafted text' : 'the field did not change');
+  else if (action.kind === 'fill' && !(action.submit && notes.length)) notes.push(!now ? 'the field is no longer visible' : now.value === action.value ? 'the field holds the value' : `the field holds ${JSON.stringify((now.value ?? '').slice(0, 60))}`);
   else if (prior && now && prior.checked !== now.checked) notes.push(`it is now ${now.checked ? 'checked' : 'unchecked'}`);
   else if (prior && now && prior.value !== now.value && now.value !== undefined) notes.push(`its value is now ${JSON.stringify(now.value.slice(0, 60))}`);
   if (after.focusedId && before.focusedId !== after.focusedId) {

@@ -30,6 +30,8 @@ npm run doctor
 
 `apiKeyConfigured: true` confirms presence, not validity. The live check below verifies an actual Jev call.
 
+Optional: set `GROQ_API_KEY` in the same ignored `.env.local` to let Jev ask Qwen to draft text for fields and suggest recovery after repeated action errors. The default `GROQ_MODEL` is `qwen/qwen3.8-27b`. The user can omit Groq and still use exact `inputs` and all ordinary computer actions. `computer_health` reports whether the helper is configured.
+
 ## 3. Register with your current MCP client
 
 Generate a launch specification:
@@ -72,7 +74,7 @@ For browser work in a disposable profile, call `computer_open` with a URL. For t
 
 The user enables `chrome://inspect/#remote-debugging` and approves Chrome's Allow dialog. Flick creates a task tab in that profile. Keep the session open across related goals to avoid reconnecting for each step; close it when finished. Do not automate Chrome's consent dialog.
 
-Delegate a complete goal to `computer_run` with exact input values and observable `until` conditions. Poll `computer_status`; do not make a host-model call for each click. Use `computer_execute` when Jev should choose among browser/native apps. Use `computer_screenshot` and `computer_continue` when visual interpretation or missing text is needed. Jev performs the subsequent actions.
+Delegate a complete goal to `computer_run` with available exact input values and observable `until` conditions. When Groq is configured, Jev may draft missing prose or search queries for observed fields. Specific account facts still need exact supplied or observed values. Poll `computer_status`; do not make a host-model call for each click. Use `computer_execute` when Jev should choose among browser/native apps. Use `computer_screenshot` and `computer_continue` when visual interpretation or missing text is needed. Jev performs the subsequent actions.
 
 For native apps, build the helper and have the user grant the launching application Accessibility permission. Screenshots and OCR also need Screen Recording permission. Call `computer_health` to check those permissions.
 

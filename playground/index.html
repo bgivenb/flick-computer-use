@@ -88,7 +88,7 @@
       <label for="done">Done when visible text or page URL contains</label><input id="done" placeholder="A visible phrase, or the destination URL" required>
       <label for="min-confidence">Minimum Jev confidence <small>(0 disables the cutoff)</small></label>
       <input id="min-confidence" type="number" min="0" max="1" step="0.05" value="0">
-      <label for="values">Exact text or values to type <small>(optional)</small></label><textarea id="values" placeholder='Plain text, or JSON such as {"post":"...","date":"9/26/2026"}' style="min-height:68px"></textarea>
+      <label for="values">Exact text or values to type <small>(optional; Qwen can draft prose or search terms when configured)</small></label><textarea id="values" placeholder='Plain text, or JSON such as {"post":"...","date":"9/26/2026"}' style="min-height:68px"></textarea>
       <div class="actions"><button id="run" type="submit">Run with Flick</button><button id="stop" type="button" class="secondary" disabled>Stop</button></div>
       <details id="continue-wrap" hidden><summary>Continue a stopped task</summary><label for="guidance">Your guidance</label><textarea id="guidance" placeholder="Give missing context or a new constraint. Jev will still choose the actions."></textarea><label for="more-values">Additional exact values</label><textarea id="more-values" placeholder="Plain text or JSON" style="min-height:60px"></textarea><div class="actions"><button id="continue" type="button">Continue</button></div></details>
     </form>

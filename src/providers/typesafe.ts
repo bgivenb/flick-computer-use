@@ -9,6 +9,7 @@ const choiceSchema = z.object({ type: z.literal('choice'), choice: z.string(), c
 const operationLabels: Record<string, string> = {
   click: 'Left-click a control', right_click: 'Right-click a control to open its context menu', double_click: 'Double-click a control',
   fill: 'Put a supplied or remembered value into a field',
+  compose: 'Draft new task-specific text for an observed field using the text helper; use supplied values for exact facts',
   fill_submit: 'Put a supplied or remembered value into a single-line field and press Enter to submit it (search boxes, address bars, one-field forms)',
   select: 'Choose an observed dropdown option', press: 'Use a keyboard key or shortcut', scroll: 'Scroll the current interface', wait: 'Wait for loading',
   scroll_top: 'Jump to the top of the browser page', scroll_bottom: 'Jump to the bottom of the browser page',

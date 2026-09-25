@@ -57,6 +57,8 @@ Run `npm run playground` and open the printed `127.0.0.1` URL. The **Talk to Jev
 
 The separate **Computer task** view sends one complete goal to Flick and displays Jev's action log. It requires an observable phrase to verify completion. The playground binds only to localhost and reads the same local TypeSafe key as the MCP server.
 
+Optionally set `GROQ_API_KEY` in `.env.local` to let Jev request text for an observed field and get a recovery hint after repeated action errors. The default helper model is `qwen/qwen3.8-27b`. Jev still chooses the field and the next computer action; Groq is not called for ordinary clicks. Exact supplied values remain available without Groq.
+
 ## Architecture
 
 ```text
@@ -65,13 +67,15 @@ MCP client ── goal + inputs + completion conditions ──► local runner
                          ┌── observe ◄── DOM / macOS AX ◄──┤
                          │                                │
                          └── Jev typed decision ──► execute + verify
+                                   │
+                                   └── optional Qwen draft / recovery hint
                                                           │
 MCP client ◄──────── result / trace / assistance needed ────┘
 ```
 
 Jev selects bounded actions against observed controls. Code owns exact values, target identity, execution, task memory, and completion checks. Related judgments share a request. Invalid field/value combinations can be withdrawn and reconsidered without executing an action; traces count these extra calls.
 
-The engine runs locally; inference uses the TypeSafe API. Goals, inputs, selected interface text, and memory are sent to TypeSafe. Screenshots are available to the host agent. Jev itself receives text and structured controls, not images. Native OCR reads text locally through Apple Vision.
+The engine runs locally; inference uses the TypeSafe API and, when configured and selected, Groq. Goals, inputs, selected interface text, and memory are sent to TypeSafe. Qwen receives task and field context when drafting, or recent errors and current controls when helping recovery. Screenshots are available to the host agent. Jev itself receives text and structured controls, not images. Native OCR reads text locally through Apple Vision.
 
 ## Benchmarks and development
 

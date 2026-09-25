@@ -206,6 +206,7 @@ export class BrowserDriver implements Driver {
     this.assertOpen();
     if (observation.sessionId !== this.id) throw new StaleObservationError();
     if (action.kind === 'wait') { await delay(200, undefined, { signal }); return; }
+    if (action.kind === 'compose') throw new Error('Text composition runs in the task runner.');
     if (action.kind === 'wait_for_change') return this.waitForChange(observation, signal);
     if (action.kind === 'wait_for_images') {
       const until = Date.now() + 3000;

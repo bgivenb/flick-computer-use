@@ -3,6 +3,7 @@ import { z } from 'zod';
 export const actionSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('click'), elementId: z.string(), button: z.enum(['left', 'right', 'middle']).optional(), clickCount: z.number().int().min(1).max(2).optional() }),
   z.object({ kind: z.literal('fill'), elementId: z.string(), value: z.string().max(10000), submit: z.boolean().optional() }),
+  z.object({ kind: z.literal('compose'), elementId: z.string() }),
   z.object({ kind: z.literal('select'), elementId: z.string(), value: z.string().max(1000) }),
   z.object({ kind: z.literal('scroll'), direction: z.enum(['up', 'down']) }),
   z.object({ kind: z.literal('scroll_top') }),
@@ -118,6 +119,10 @@ export interface Decider {
   decide(input: TaskInput, observation: Observation, candidates: Candidates,
     history: string[], signal: AbortSignal, context?: DecisionContext): Promise<Decision>;
 }
+export interface TextHelper {
+  compose(input: TaskInput, observation: Observation, field: ElementInfo, signal: AbortSignal): Promise<{ status: 'text' | 'need_input'; text: string }>;
+  repair(input: TaskInput, observation: Observation, history: string[], signal: AbortSignal): Promise<string>;
+}
 const roleNames: Record<string, string> = { AXLink: 'link', AXImage: 'image', AXStaticText: 'text', AXMenuItem: 'menu item', AXMenuBarItem: 'menu bar item',
   AXPopUpButton: 'pop-up button', AXMenuButton: 'menu button', AXCell: 'cell', AXRow: 'row', AXGroup: 'group', AXList: 'list', AXSearchField: 'search field' };
 export const roleName = (role: string) => roleNames[role] ?? (role.startsWith('AX') ? role.slice(2).replace(/([a-z])([A-Z])/g, '$1 $2').toLowerCase() : role);
@@ -154,7 +159,7 @@ export function verify(observation: Observation, conditions: Condition[]) {
 
 // Keys name the operation and its observed target (click:e12, fill:e5:0), so every option refers to an
 // element in the same observation Jev receives.
-export function candidatesFor(observation: Observation, inputs: Record<string, string>, options: { factored?: boolean } = {}): Candidates {
+export function candidatesFor(observation: Observation, inputs: Record<string, string>, options: { factored?: boolean; canCompose?: boolean } = {}): Candidates {
   const candidates: Candidates = {
     blocked: { action: 'blocked', description: 'Cannot proceed with the supplied values and available controls; return to the assistant.' },
     done: { action: 'done', description: 'The requested outcome is already visible. Code will independently verify it.' },
@@ -204,6 +209,8 @@ export function candidatesFor(observation: Observation, inputs: Record<string, s
       if (element.value !== value) add(`fill:${element.id}:${index}`, { kind: 'fill', elementId: element.id, value }, `Fill ${target} using supplied input ${JSON.stringify(name)}`, label);
       if (!element.multiline) add(`submit:${element.id}:${index}`, { kind: 'fill', elementId: element.id, value, submit: true }, `Fill ${target} using supplied input ${JSON.stringify(name)} and press Enter`, label);
     });
+    if (element.actions.includes('fill') && options.canCompose)
+      add(`compose:${element.id}`, { kind: 'compose', elementId: element.id }, `Ask the text helper to draft task-specific text for ${target}`, label);
     if (element.actions.includes('select')) (element.options ?? []).forEach((option, index) => {
       if (!option.disabled && !option.selected) add(`select:${element.id}:${index}`, { kind: 'select', elementId: element.id, value: option.value }, `Select ${JSON.stringify(option.label)} in ${target}`, `${JSON.stringify(option.label)} in ${label}`);
     });

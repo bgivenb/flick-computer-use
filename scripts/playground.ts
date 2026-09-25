@@ -93,7 +93,8 @@ async function route(req: IncomingMessage, res: ServerResponse) {
         'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer' });
       res.end(page); return;
     }
-    if (req.method === 'GET' && req.url === '/api/health') { json(res, 200, { model: config.model, keyConfigured: Boolean(config.apiKey) }); return; }
+    if (req.method === 'GET' && req.url === '/api/health') { json(res, 200, { model: config.model, keyConfigured: Boolean(config.apiKey),
+      groqConfigured: Boolean(config.groqApiKey), groqModel: config.groqApiKey ? config.groqModel : undefined }); return; }
     if (req.method === 'GET' && req.url === '/api/task') {
       const result = task ? await (await client()).call('computer_status', { taskId: task.id, waitMs: 0 }) : null;
       if (result) task!.status = result.status;

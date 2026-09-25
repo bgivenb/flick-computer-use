@@ -64,6 +64,7 @@ export class MacOSDriver implements Driver {
     signal.throwIfAborted();
     if (observation.sessionId !== this.id) throw new StaleObservationError();
     if (action.kind === 'wait') { await delay(200, undefined, { signal }); return; }
+    if (action.kind === 'compose') throw new Error('Text composition runs in the task runner.');
     if (['wait_for_load', 'wait_for_change', 'wait_for_images', 'back', 'forward', 'refresh', 'scroll_top', 'scroll_bottom'].includes(action.kind))
       throw new Error('This action requires a browser session.');
     if (action.kind === 'switch' || action.kind === 'remember') throw new Error('Use a desktop session for app switching and memory.');

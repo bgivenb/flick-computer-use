@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { setTimeout as delay } from 'node:timers/promises';
 import { TaskRunner } from '../src/core/runner.js';
-import { taskSchema, type Driver, type Observation, type Decider, RecoverableActionError, StaleObservationError, candidatesFor, verify } from '../src/core/types.js';
+import { taskSchema, type Driver, type Observation, type Decider, type TextHelper, RecoverableActionError, StaleObservationError, candidatesFor, verify } from '../src/core/types.js';
 
 // churn: every observation differs (text, revision) while the task state does not, like a live results page.
 function environment(decider: Decider, options: { stale?: boolean; alreadyDone?: boolean; mutate?: boolean; churn?: boolean; challenge?: boolean } = {}) {
@@ -24,6 +24,65 @@ function environment(decider: Decider, options: { stale?: boolean; alreadyDone?:
 }
 // A withdrawn click leaves nothing to click; a real decider would choose another option, this one gives up.
 const click: Decider = { decide: async (_, __, candidates) => ({ choice: Object.keys(candidates).find(k => candidates[k].description.startsWith('Click')) ?? 'blocked', confidence: .99, probability: .99, latencyMs: 1 }) };
+
+test('Jev can choose Groq drafting for an observed field without pre-supplied text', async () => {
+  let value = '', compositions = 0;
+  const driver: Driver = { id: 's', kind: 'browser', label: 'fixture',
+    observe: async () => ({ id: 'o', revision: value || 'empty', sessionId: 's', kind: 'browser', title: 'Search', text: 'Search the site',
+      elements: [{ id: 'q', role: 'textbox', name: 'Search', value, disabled: false, actions: ['fill'] }], truncated: false, capturedAt: Date.now() }),
+    act: async action => { assert.equal(action.kind, 'fill'); if (action.kind === 'fill') value = action.value; },
+    screenshot: async () => Buffer.alloc(0), close: async () => {} };
+  const helper: TextHelper = { compose: async (_input, _observation, field) => {
+    compositions++; assert.equal(field.name, 'Search'); return { status: 'text', text: 'evrylo mortgage software' }; },
+    repair: async () => { throw new Error('No repair needed'); } };
+  const decider: Decider = { decide: async (_input, _observation, candidates) => {
+    assert.ok(candidates['compose:q']);
+    return { choice: 'compose:q', confidence: .99, probability: .99, latencyMs: 1 };
+  } };
+  const runner = new TaskRunner(decider, helper);
+  const input = taskSchema.parse({ sessionId: 's', goal: 'Search for evryLO mortgage software',
+    until: [{ kind: 'field', name: 'Search', value: 'evrylo mortgage software' }] });
+  const result = await runner.wait(runner.start(driver, input).id, 1000);
+  assert.equal(result.status, 'succeeded', result.reason);
+  assert.equal(value, 'evrylo mortgage software'); assert.equal(compositions, 1);
+  assert.equal(result.metrics.helperCalls, 1);
+  assert.equal(result.events[0].effect, 'the field holds drafted text');
+});
+
+test('Qwen asking for a missing exact fact does not write to the interface', async () => {
+  let writes = 0;
+  const field = { id: 'account', role: 'textbox', name: 'Account number', disabled: false, actions: ['fill' as const] };
+  const driver: Driver = { id: 's', kind: 'browser', label: 'fixture',
+    observe: async () => ({ id: 'o', revision: 'r', sessionId: 's', kind: 'browser', title: 'Account', text: 'Account form', elements: [field], truncated: false, capturedAt: Date.now() }),
+    act: async () => { writes++; }, screenshot: async () => Buffer.alloc(0), close: async () => {} };
+  const runner = new TaskRunner({ decide: async () => ({ choice: 'compose:account', confidence: 1, probability: 1, latencyMs: 1 }) },
+    { compose: async () => ({ status: 'need_input', text: '' }), repair: async () => '' });
+  const input = taskSchema.parse({ sessionId: 's', goal: 'Fill account number', until: [{ kind: 'text', text: 'Saved' }] });
+  const result = await runner.wait(runner.start(driver, input).id, 1000);
+  assert.equal(result.status, 'blocked'); assert.equal(writes, 0); assert.match(result.reason ?? '', /exact value/);
+});
+
+test('after repeated action errors Groq guidance is passed to Jev without executing its suggestion', async () => {
+  let saved = false, attempts = 0, repairs = 0;
+  const driver: Driver = { id: 's', kind: 'browser', label: 'fixture',
+    observe: async () => ({ id: 'o', revision: saved ? 'saved' : 'ready', sessionId: 's', kind: 'browser', title: 'Fixture',
+      text: saved ? 'Saved' : 'Ready', elements: ['bad', 'good'].map(id => ({ id, role: 'button', name: id, disabled: false, actions: ['click'] })),
+      truncated: false, capturedAt: Date.now() }),
+    act: async action => { if ('elementId' in action && action.elementId === 'bad') { attempts++; throw new RecoverableActionError('covered', 'Try another visible route.'); }
+      if ('elementId' in action && action.elementId === 'good') saved = true; },
+    screenshot: async () => Buffer.alloc(0), close: async () => {} };
+  const helper: TextHelper = { compose: async () => { throw new Error('No draft needed'); }, repair: async () => { repairs++; return 'Try the good button.'; } };
+  const decider: Decider = { decide: async (_input, _observation, candidates, history) => ({
+    choice: history.some(line => line.includes('Text helper recovery hint')) ? 'click:good' : candidates['click:bad'] ? 'click:bad' : 'wait',
+    confidence: .99, probability: .99, latencyMs: 1,
+  }) };
+  const runner = new TaskRunner(decider, helper);
+  const input = taskSchema.parse({ sessionId: 's', goal: 'Save', until: [{ kind: 'text', text: 'Saved' }] });
+  const result = await runner.wait(runner.start(driver, input).id, 1000);
+  assert.equal(result.status, 'succeeded', result.reason);
+  assert.equal(attempts, 2); assert.equal(repairs, 1);
+  assert.equal(result.metrics.helperCalls, 1);
+});
 
 test('clipboard completion requires a newly copied image rather than existing clipboard contents', async () => {
   const observation = await environment(click).driver.observe();
