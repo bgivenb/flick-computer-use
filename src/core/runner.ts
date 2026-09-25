@@ -197,7 +197,7 @@ export class TaskRunner {
               throw new RecoverableActionError('the text helper could not draft this field', 'Use a supplied value or another route; the helper may be temporarily unavailable.');
             } finally { task.metrics.helperMs += performance.now() - helperStarted; }
             signal.throwIfAborted();
-            if (draft.status === 'need_input') throw new BlockedError(`The field ${JSON.stringify(field.name)} needs an exact value the task has not supplied.`);
+            if (draft.status === 'need_input') throw new BlockedError(`The text helper asked for an exact value for ${JSON.stringify(field.name || 'unlabeled text field')}; supply it or give the task more context.`);
             let value = draft.text;
             if (field.inputType === 'number') {
               value = value.replace(/[$,\s]/g, '');

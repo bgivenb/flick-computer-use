@@ -53,7 +53,7 @@ export const snapshotScript = String.raw`(() => {
     state.nodes.set(id, node);
     const labelled = (node.getAttribute('aria-labelledby') || '').split(/\s+/).map(id => node.getRootNode().getElementById?.(id)?.textContent || '').join(' ');
     const labelText = Array.from(node.labels || []).map(label => { const copy = label.cloneNode(true); copy.querySelectorAll('input,select,textarea,button').forEach(child => child.remove()); return copy.textContent; }).join(' ');
-    const name = tidy(node.getAttribute('aria-label') || labelled || labelText || node.getAttribute('alt') || node.getAttribute('placeholder') || node.getAttribute('title') || (node.tagName === 'INPUT' && ['submit','button'].includes(node.type) ? node.value : '') || (node.tagName === 'SELECT' ? node.getAttribute('name') : node.innerText) || node.querySelector('img[alt]')?.alt || node.getAttribute('name') || role);
+    const name = tidy(node.getAttribute('aria-label') || labelled || labelText || node.getAttribute('alt') || node.getAttribute('placeholder') || node.getAttribute('title') || (node.tagName === 'INPUT' && ['submit','button'].includes(node.type) ? node.value : '') || (node.tagName === 'SELECT' ? node.getAttribute('name') : node.innerText) || node.querySelector('img[alt]')?.alt || node.getAttribute('name') || role) || role || 'textbox';
     const disabled = Boolean(node.disabled || node.getAttribute('aria-disabled') === 'true');
     const actions = [];
     if (canClick && !isSecret && node.tagName !== 'SELECT' && pointerReachable(node)) actions.push('click');

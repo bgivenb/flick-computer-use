@@ -35,6 +35,10 @@ export async function fixture(outboundUrl?: string) {
         x.fillStyle='#fff';x.font='bold 42px Arial';x.fillText('OPEN PAINTED PANEL',45,94);
         c.onclick=()=>document.getElementById('status').textContent='Canvas panel opened';</script>`);
     }
+    else if (request.url === '/unlabeled-editor') {
+      response.setHeader('Content-Type', 'text/html');
+      response.end('<!doctype html><title>Online note editor</title><h1>Write a note</h1><div contenteditable="true" style="width:500px;height:200px;border:1px solid black">\n</div>');
+    }
     else if (request.url === '/edges') {
       response.setHeader('Content-Type', 'text/html');
       response.end(`<!doctype html><title>Edge cases</title><label>Visible input<input id="visible"></label><input aria-label="Hidden input" hidden><input type="password" aria-label="Password" value="do-not-expose"><div id="shadow"></div><iframe src="/frame"></iframe><img alt="Test illustration" width="160" height="100" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='100'%3E%3Crect width='160' height='100' fill='blue'/%3E%3C/svg%3E"><script>document.getElementById('shadow').attachShadow({mode:'open'}).innerHTML='<button>Shadow action</button>'</script>`);

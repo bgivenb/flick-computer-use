@@ -39,7 +39,8 @@ test('Cerebras receives the user goal, current page, and chosen form field', asy
   assert.equal(answer.text, 'evrylo.com');
   assert.equal(requestBody.model, 'qwen-3.8-27b');
   assert.equal(requestBody.reasoning_effort, 'none');
-  const state = JSON.parse(requestBody.messages[0].content);
+  assert.match(requestBody.messages[0].content, /Jev has no mouth/);
+  const state = JSON.parse(requestBody.messages[1].content);
   assert.equal(state.goal, input.goal);
   assert.equal(state.page.url, observation.url);
   assert.equal(state.form.chosenFieldId, field.id);
@@ -49,7 +50,7 @@ test('Cerebras receives the user goal, current page, and chosen form field', asy
 test('a search-field need_input answer is retried with the current search step', async () => {
   let calls = 0;
   const mock: typeof fetch = async (_url, init) => {
-    const state = JSON.parse(JSON.parse(String(init?.body)).messages[0].content);
+    const state = JSON.parse(JSON.parse(String(init?.body)).messages[1].content);
     calls++;
     if (calls === 2) assert.match(state.instruction, /current Search field/);
     return new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify(calls === 1
@@ -69,7 +70,7 @@ test('a search-field need_input answer is retried with the current search step',
 test('a required field without a supplied value is not invented', async () => {
   const states: any[] = [];
   const mock: typeof fetch = async (_url, init) => {
-    states.push(JSON.parse(JSON.parse(String(init?.body)).messages[0].content));
+    states.push(JSON.parse(JSON.parse(String(init?.body)).messages[1].content));
     return new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ status: 'need_input', text: '' }) } }] }),
       { status: 200 });
   };
@@ -87,6 +88,31 @@ test('a required field without a supplied value is not invented', async () => {
   assert.equal(states[0].field.name, 'Employer name *');
   assert.equal(states[0].page.url, observation.url);
   assert.equal(states.length, 1);
+});
+
+test('an unlabeled creative editor drafts requested writing after an unnecessary need_input', async () => {
+  let calls = 0;
+  const mock: typeof fetch = async (_url, init) => {
+    calls++;
+    const body = JSON.parse(String(init?.body));
+    assert.match(body.messages[0].content, /Your only job is to write the text/);
+    const state = JSON.parse(body.messages[1].content);
+    assert.match(state.instruction, calls === 1 ? /creative text/ : /no separate exact value is needed/);
+    return new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify(calls === 1
+      ? { status: 'need_input', text: '' } : { status: 'text', text: 'A quiet page\nReceives the morning light' }) } }] }),
+      { status: 200 });
+  };
+  const helper = new GroqTextHelper('private-test-key', 'qwen/qwen3.8-27b', mock);
+  const field: Observation['elements'][number] = { id: 'editor', role: 'textbox', name: '', disabled: false,
+    actions: ['fill'], multiline: true };
+  const observation: Observation = { id: 'o', revision: 'r', sessionId: 's', kind: 'browser', title: 'Online note editor',
+    text: 'Write a note', elements: [field], truncated: false, capturedAt: Date.now() };
+  const input = taskSchema.parse({ sessionId: 's', goal: 'Find an online note editor and write a poem there.',
+    until: [{ kind: 'text', text: 'A quiet page' }] });
+  const result = await helper.compose(input, observation, field, new AbortController().signal);
+  assert.equal(result.status, 'text');
+  assert.match(result.text, /A quiet page/);
+  assert.equal(result.modelCalls, 2);
 });
 
 test('Cerebras 503 falls back to Groq and skips the unavailable primary on the next field', async () => {

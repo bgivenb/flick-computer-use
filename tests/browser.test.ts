@@ -56,6 +56,17 @@ test('real browser: form flow, stale observation rejection, and independent save
     assert.ok((await driver.screenshot()).length > 1000);
   } finally { await driver.close(); }
 });
+test('real browser: whitespace-only editor has a usable fallback name', async t => {
+  const web = await fixture(); const dir = await mkdtemp(join(tmpdir(), 'flick-editor-test-'));
+  t.after(async () => { await web.close(); await rm(dir, { recursive: true, force: true }); });
+  const driver = await BrowserDriver.open({ url: web.url + '/unlabeled-editor', headless: true }, dir);
+  try {
+    const observation = await driver.observe();
+    const editor = observation.elements.find(e => e.multiline && e.actions.includes('fill'));
+    assert.ok(editor);
+    assert.equal(editor.name, 'textbox');
+  } finally { await driver.close(); }
+});
 test('real browser: a live-updating page does not invalidate an unchanged target, and a fill can submit', async t => {
   const web = await fixture(); const dir = await mkdtemp(join(tmpdir(), 'jev-test-'));
   t.after(async () => { await web.close(); await rm(dir, { recursive: true, force: true }); });
