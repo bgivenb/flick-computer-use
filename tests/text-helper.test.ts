@@ -66,6 +66,29 @@ test('a search-field need_input answer is retried with the current search step',
   assert.equal(calls, 2);
 });
 
+test('a fictional required field gets a focused retry instead of blocking', async () => {
+  const states: any[] = [];
+  const mock: typeof fetch = async (_url, init) => {
+    states.push(JSON.parse(JSON.parse(String(init?.body)).messages[0].content));
+    return new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify(states.length === 1
+      ? { status: 'need_input', text: '' } : { status: 'text', text: 'Cedar Harbor Studio' }) } }] }), { status: 200 });
+  };
+  const helper = new GroqTextHelper('private-test-key', 'qwen/qwen3.8-27b', mock);
+  const field: Observation['elements'][number] = { id: 'employer', role: 'textbox', name: 'Employer name *',
+    disabled: false, actions: ['fill'] };
+  const observation: Observation = { id: 'o', revision: 'r', sessionId: 's', kind: 'browser', title: 'Income Calculator',
+    url: 'https://example.com/income-calculator', text: 'Employer details. Employer name *',
+    elements: [field], truncated: false, capturedAt: Date.now() };
+  const input = taskSchema.parse({ sessionId: 's', goal: 'Create fictional test borrowers and fill the income calculator.',
+    until: [{ kind: 'text', text: 'Saved' }] });
+  const result = await helper.compose(input, observation, field, new AbortController().signal);
+  assert.deepEqual(result, { status: 'text', text: 'Cedar Harbor Studio', modelCalls: 2 });
+  assert.match(states[0].instruction, /invent one plausible fictional value/);
+  assert.match(states[1].instruction, /explicitly fictional test scenario/);
+  assert.equal(states[1].field.name, 'Employer name *');
+  assert.equal(states[1].page.url, observation.url);
+});
+
 test('Cerebras 503 falls back to Groq and skips the unavailable primary on the next field', async () => {
   let cerebrasCalls = 0, groqCalls = 0;
   const failing: typeof fetch = async () => { cerebrasCalls++; return new Response('', { status: 503 }); };
