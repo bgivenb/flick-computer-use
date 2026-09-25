@@ -84,3 +84,24 @@ test('an unavailable field/value choice is reconsidered without an action and ev
   assert.equal(result.choice, 'click:save'); assert.equal(calls, 2); assert.equal(result.modelCalls, 2);
   assert.deepEqual(result.trace?.recoveries, [{ operation: 'fill', elementId: 'e0' }]);
 });
+test('Jev choosing no matching value reconsiders another action instead of stopping the task', async () => {
+  const o = observed();
+  o.elements.push({ id: 'next', role: 'button', name: 'Continue', disabled: false, actions: ['click'] });
+  const inputs = { text: 'search terms' };
+  const candidates = candidatesFor(o, inputs, { factored: true });
+  const input = taskSchema.parse({ sessionId: 's', goal: 'Continue', inputs, until: [{ kind: 'text', text: 'Done' }] });
+  let calls = 0;
+  const decider = new TypeSafeDecider('k', 'jev-latest', async (_url, init) => {
+    const body = JSON.parse(String(init?.body)); calls++;
+    if (calls === 1) return new Response(JSON.stringify({ answers: {
+      operation: answer('fill'), fill_target: answer('e0'), fill_value_0: answer('none'),
+    } }));
+    assert.equal(body.questions.fill_target, undefined);
+    assert.equal(body.questions.fill_submit_target.criteria.e0, 'textbox "Field 0"');
+    return new Response(JSON.stringify({ answers: { operation: answer('click'), click_target: answer('next') } }));
+  });
+  const result = await decider.decide(input, o, candidates, [], new AbortController().signal);
+  assert.equal(result.choice, 'click:next');
+  assert.equal(result.modelCalls, 2);
+  assert.deepEqual(result.trace?.recoveries, [{ operation: 'fill', elementId: 'e0' }]);
+});

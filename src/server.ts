@@ -220,6 +220,7 @@ export function createServer(config = loadConfig()) {
     await runner.close();
     await Promise.allSettled([...sessions.values()].map(s => s.close()));
     sessions.clear();
+    await BrowserDriver.disconnectExisting();
   }
   return { server, close };
 }

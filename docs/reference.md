@@ -18,6 +18,8 @@ Pass this to `computer_open`. Existing-Chrome mode discovers the standard Chrome
 
 Omit `connection` for a dedicated persistent Playwright profile. `browser: "chrome"` selects installed Google Chrome; the default is Chromium. `profile` names an isolated directory under `.local/browser-profiles`. Browser tasks can navigate across sites by default. Supplying a nonempty `allowedOrigins` list opts into restricting document navigation to the starting origin and listed origins; asset/API subresources remain unrestricted.
 
+Existing-Chrome tasks reuse one Chrome-approved debugging connection across task tabs in the same MCP process. Closing a task closes its tabs; stopping the MCP process disconnects from Chrome. Chrome may ask for permission again after that process restarts.
+
 `recordVideo: true` records dedicated-browser sessions into `.local/recordings`; it is unsupported on an existing-Chrome connection. The video is finalized when the session closes.
 
 ## Run a goal

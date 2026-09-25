@@ -29,7 +29,7 @@ const clip = (text: string, length: number) => text.length > length ? `${text.sl
 type Choice = { type: 'choice'; instructions: string; criteria: Record<string, string> };
 class UnavailableFieldChoice extends BlockedError {
   constructor(readonly operation: 'fill' | 'fill_submit', readonly elementId: string) {
-    super('The chosen field already has that value or the field/value combination is unavailable.');
+    super('No supplied or remembered value fits the chosen field, or the field/value combination is unavailable.');
   }
 }
 
@@ -102,7 +102,7 @@ export function decisionContract(candidates: Candidates, observation: Observatio
     else if (op.choice === 'fill' || op.choice === 'fill_submit') {
       const target = read(answers, op.choice === 'fill' ? 'fill_target' : 'fill_submit_target'), value = read(answers, fieldValue.get(target.choice) ?? 'fill_value');
       used.push(target, value);
-      if (value.choice === 'none') throw new BlockedError('No supplied or remembered value fits the chosen field.');
+      if (value.choice === 'none') throw new UnavailableFieldChoice(op.choice, target.choice);
       const match = Object.entries(groups[op.choice]).find(([, c]) => typeof c.action !== 'string' && c.action.kind === 'fill' &&
         c.action.elementId === target.choice && c.action.value === values.get(value.choice));
       if (!match) throw new UnavailableFieldChoice(op.choice, target.choice);
@@ -198,7 +198,7 @@ export class TypeSafeDecider implements Decider {
           trace: { requestChars: body.length, inputTokens: inputTokens || undefined, model: result.model, attempts: modelCalls, used,
             ...(recoveries.length ? { recoveries } : {}) } };
       } catch (error) {
-        if (!(error instanceof UnavailableFieldChoice) || recoveries.length >= 3) throw error;
+        if (!(error instanceof UnavailableFieldChoice) || recoveries.length >= 8) throw error;
         recoveries.push({ operation: error.operation, elementId: error.elementId });
         // Reconsider this decision with that unavailable branch withdrawn. No UI action or invented value.
         available = Object.fromEntries(Object.entries(available).filter(([, candidate]) => {

@@ -18,6 +18,8 @@ function navigationOrigins(start: URL, allowedOrigins?: string[]) {
   })]);
 }
 export class BrowserDriver implements Driver {
+  private static existingChrome?: { endpoint: string; browser: Browser };
+  private static openingChrome?: Promise<{ endpoint: string; browser: Browser }>;
   readonly id = randomUUID();
   readonly kind = 'browser' as const;
   readonly label: string;
@@ -66,6 +68,36 @@ export class BrowserDriver implements Driver {
       return new BrowserDriver(context, page, origins, options.browser ?? 'chromium');
     } catch (error) { await context.close(); throw error; }
   }
+  private static async approvedChrome(endpoint: string) {
+    const cached = this.existingChrome;
+    if (cached?.endpoint === endpoint && cached.browser.isConnected()) return cached.browser;
+    if (this.openingChrome) {
+      const opening = await this.openingChrome;
+      if (opening.endpoint === endpoint && opening.browser.isConnected()) return opening.browser;
+    }
+    const opening = (async () => {
+      let browser: Browser;
+      try { browser = await chromium.connectOverCDP(endpoint, { timeout: 120000 }); }
+      catch (error) {
+        const detail = error instanceof Error ? error.message : '';
+        if (/403|forbidden|connection rejected/i.test(detail))
+          throw new Error('Chrome rejected the debugging connection. Check Chrome for its remote-debugging Allow prompt, then retry. If no prompt appears, check chrome://inspect/#remote-debugging.');
+        throw error;
+      }
+      const connected = { endpoint, browser };
+      this.existingChrome = connected;
+      browser.on('disconnected', () => { if (this.existingChrome === connected) this.existingChrome = undefined; });
+      return connected;
+    })();
+    this.openingChrome = opening;
+    try { return (await opening).browser; }
+    finally { if (this.openingChrome === opening) this.openingChrome = undefined; }
+  }
+  static async disconnectExisting() {
+    const browser = this.existingChrome?.browser;
+    this.existingChrome = undefined;
+    await browser?.close().catch(() => {});
+  }
   private static async connectExisting(options: BrowserOptions) {
     if (options.recordVideoDir) throw new Error('Built-in video recording requires a dedicated browser. Record your screen for an existing-Chrome session.');
     if (process.platform !== 'darwin') throw new Error('Existing Chrome discovery currently supports macOS.');
@@ -77,8 +109,9 @@ export class BrowserDriver implements Driver {
     const [port, path] = address.trim().split(/\r?\n/);
     if (!/^\d+$/.test(port) || Number(port) < 1 || Number(port) > 65535 || !/^\/devtools\/browser\/[a-zA-Z0-9-]+$/.test(path))
       throw new Error('Chrome published an invalid local debugging endpoint.');
-    // Chrome presents its own Allow dialog. The user approves this connection in Chrome.
-    const browser = await chromium.connectOverCDP(`ws://127.0.0.1:${port}${path}`, { timeout: 120000 });
+    // Chrome presents its own Allow dialog for a new connection. Reuse an approved
+    // connection for later task tabs in this MCP process instead of asking every run.
+    const browser = await this.approvedChrome(`ws://127.0.0.1:${port}${path}`);
     let page: Page | undefined;
     try {
       const context = browser.contexts()[0];
@@ -97,7 +130,6 @@ export class BrowserDriver implements Driver {
       return driver;
     } catch (error) {
       await page?.close().catch(() => {});
-      await browser.close();
       throw error;
     }
   }
@@ -233,6 +265,6 @@ export class BrowserDriver implements Driver {
   async close() {
     if (!this.connectedBrowser) { await this.context.close(); return; }
     await Promise.allSettled([...this.ownedPages].map(page => page.close()));
-    await this.connectedBrowser.close(); // Disconnect a CDP client; leave the user's Chrome running.
+    // The approved CDP connection is shared with later task tabs and ends on MCP shutdown.
   }
 }
