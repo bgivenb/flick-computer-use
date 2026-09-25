@@ -115,7 +115,7 @@
     $('tab-jev').classList.toggle('active', tab === 'jev'); $('tab-task').classList.toggle('active', tab === 'task');
   }
   $('tab-jev').onclick = () => show('jev'); $('tab-task').onclick = () => show('task');
-  api('/api/health').then(x => $('health').textContent = `${x.keyConfigured ? 'Key ready' : 'Add key to .env.local'} · ${x.model}`).catch(e => $('health').textContent = e.message);
+  api('/api/health').then(x => $('health').textContent = `${x.keyConfigured ? 'Jev key ready' : 'Add Jev key to .env.local'} · ${x.model}${x.textHelper ? ` · ${x.textHelper.provider} ${x.textHelper.model} text helper` : ''}`).catch(e => $('health').textContent = e.message);
   $('jev-form').addEventListener('submit', async event => {
     event.preventDefault(); $('ask').disabled = true;
     const payload = { state: $('state').value, question: $('question').value, options: $('options').value, raw: $('raw').value };

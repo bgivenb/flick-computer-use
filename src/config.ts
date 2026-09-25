@@ -14,6 +14,8 @@ export function loadConfig() {
     model: process.env.TYPESAFE_MODEL || 'jev-latest',
     groqApiKey: process.env.GROQ_API_KEY,
     groqModel: process.env.GROQ_MODEL || 'qwen/qwen3.8-27b',
+    cerebrasApiKey: process.env.CEREBRAS_API_KEY,
+    cerebrasModel: process.env.CEREBRAS_MODEL || 'qwen-3.8-27b',
     localDir,
     nativePath: resolve(root, '.local/bin/jev-macos'),
   };

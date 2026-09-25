@@ -139,6 +139,7 @@ export function decisionState(input: TaskInput, observation: Observation, histor
         ...(e.value !== undefined && !e.id.startsWith('read:') && e.value !== e.name ? { value: clip(e.value, 300) } : {}), ...(e.context ? { context: clip(e.context, 100) } : {}),
         ...(e.disabled ? { disabled: true } : {}), ...(e.focused ? { focused: true } : {}),
         ...(e.selected ? { selected: true } : {}), ...(e.checked !== undefined ? { checked: e.checked } : {}),
+        ...(e.inputType ? { inputType: e.inputType } : {}), ...(e.required ? { required: true } : {}),
         ...(e.image ? { image: { width: e.image.width, height: e.image.height } } : {}) })),
       more_controls_not_listed: observation.truncated || observation.text.length > 6000 },
     ...(context?.clipboard ? { clipboard: context.clipboard } : {}),

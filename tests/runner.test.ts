@@ -62,6 +62,22 @@ test('Qwen asking for a missing exact fact does not write to the interface', asy
   assert.equal(result.status, 'blocked'); assert.equal(writes, 0); assert.match(result.reason ?? '', /exact value/);
 });
 
+test('a composed sample amount is normalized for a numeric form field', async () => {
+  let value = '';
+  const field = { id: 'income', role: 'textbox', name: 'Monthly income', inputType: 'number', min: '0', disabled: false, actions: ['fill' as const] };
+  const driver: Driver = { id: 's', kind: 'browser', label: 'fixture',
+    observe: async () => ({ id: 'o', revision: value || 'r', sessionId: 's', kind: 'browser', title: 'Calculator', text: 'Income calculator',
+      elements: [{ ...field, value }], truncated: false, capturedAt: Date.now() }),
+    act: async action => { assert.equal(action.kind, 'fill'); if (action.kind === 'fill') value = action.value; },
+    screenshot: async () => Buffer.alloc(0), close: async () => {} };
+  const runner = new TaskRunner({ decide: async () => ({ choice: 'compose:income', confidence: 1, probability: 1, latencyMs: 1 }) },
+    { compose: async () => ({ status: 'text', text: '$5,000' }), repair: async () => '' });
+  const input = taskSchema.parse({ sessionId: 's', goal: 'Try the calculator with sample income numbers',
+    until: [{ kind: 'field', name: 'Monthly income', value: '5000' }] });
+  const result = await runner.wait(runner.start(driver, input).id, 1000);
+  assert.equal(result.status, 'succeeded', result.reason); assert.equal(value, '5000');
+});
+
 test('after repeated action errors Groq guidance is passed to Jev without executing its suggestion', async () => {
   let saved = false, attempts = 0, repairs = 0;
   const driver: Driver = { id: 's', kind: 'browser', label: 'fixture',

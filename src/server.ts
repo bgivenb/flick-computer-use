@@ -5,7 +5,7 @@ import { TaskRunner } from './core/runner.js';
 import { BrowserDriver } from './drivers/browser.js';
 import { MacOSDriver, NativeBridge } from './drivers/macos.js';
 import { TypeSafeDecider } from './providers/typesafe.js';
-import { GroqTextHelper } from './providers/groq.js';
+import { CerebrasTextHelper, GroqTextHelper } from './providers/text-helper.js';
 import { loadConfig } from './config.js';
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -22,7 +22,8 @@ export function createServer(config = loadConfig()) {
   let openingNative = false;
   const runner = new TaskRunner(config.apiKey ? new TypeSafeDecider(config.apiKey, config.model) : {
     decide: async () => { throw new Error('Set TYPESAFE_API_KEY in .env.local before running Jev tasks. Direct inspection and actions work without it.'); },
-  }, config.groqApiKey ? new GroqTextHelper(config.groqApiKey, config.groqModel) : undefined);
+  }, config.cerebrasApiKey ? new CerebrasTextHelper(config.cerebrasApiKey, config.cerebrasModel)
+    : config.groqApiKey ? new GroqTextHelper(config.groqApiKey, config.groqModel) : undefined);
   const workflows = new WorkflowRunner(runner, (bundleId, ocr) => MacOSDriver.open(bundleId, config.nativePath, ocr));
   const desktopOwned = () => openingNative || workflows.busy() || [...sessions.values()].some(s => s.kind === 'macos' || s.kind === 'desktop');
   function session(id: string) {
@@ -45,6 +46,7 @@ export function createServer(config = loadConfig()) {
       let message = error instanceof Error ? error.message : 'Operation failed.';
       if (config.apiKey) message = message.replaceAll(config.apiKey, '[redacted]');
       if (config.groqApiKey) message = message.replaceAll(config.groqApiKey, '[redacted]');
+      if (config.cerebrasApiKey) message = message.replaceAll(config.cerebrasApiKey, '[redacted]');
       return { ...json({ error: message }), isError: true };
     }
   };
@@ -62,10 +64,11 @@ export function createServer(config = loadConfig()) {
       finally { bridge.close(); }
     }
     return json({ version: '0.1.0', transport: 'stdio', apiKeyConfigured: Boolean(config.apiKey), model: config.model,
-      groqConfigured: Boolean(config.groqApiKey), groqModel: config.groqApiKey ? config.groqModel : undefined, native,
+      textHelper: config.cerebrasApiKey ? { provider: 'cerebras', model: config.cerebrasModel }
+        : config.groqApiKey ? { provider: 'groq', model: config.groqModel } : null, native,
       capabilities: { browser: true, macos: process.platform === 'darwin', goalAcrossApps: true, taskMemory: true, factoredDecisions: true,
-        generatedText: Boolean(config.groqApiKey), recoveryHints: Boolean(config.groqApiKey), ocr: process.platform === 'darwin' && existsSync(config.nativePath) },
-      dataFlow: 'Browser/desktop controls are read locally. Jev tasks send selected interface text and supplied inputs to TypeSafe. When configured and chosen, Groq receives the goal, chosen field, and selected page text for drafting; after repeated failures it receives recent errors and controls for a recovery hint. No screenshots are sent to either model.' });
+        generatedText: Boolean(config.cerebrasApiKey || config.groqApiKey), recoveryHints: Boolean(config.cerebrasApiKey || config.groqApiKey), ocr: process.platform === 'darwin' && existsSync(config.nativePath) },
+      dataFlow: 'Browser/desktop controls are read locally. Jev tasks send selected interface text and supplied inputs to TypeSafe. When configured and chosen, the configured text helper receives the goal, chosen field, and selected page text for drafting; after repeated failures it receives recent errors and controls for a recovery hint. No screenshots are sent to either model.' });
   }));
   server.registerTool('computer_open', {
     description: 'Open a dedicated browser, connect to existing Chrome in a new task tab, or connect to a native macOS app. Browser tasks can navigate across sites by default. Supply allowedOrigins only to opt into a navigation restriction. Existing Chrome uses the running profile and Chrome’s user-approved remote-debugging flow. Native OCR runs locally.',

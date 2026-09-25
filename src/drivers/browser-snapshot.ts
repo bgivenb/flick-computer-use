@@ -63,7 +63,9 @@ export const snapshotScript = String.raw`(() => {
     const context = container && tidy(container.getAttribute('aria-label') || container.querySelector('legend,h1,h2,h3,[role="rowheader"],th')?.textContent);
     const element = { id, role: role || 'textbox', name, disabled, actions, focused: node === active,
       selected: node.getAttribute('aria-selected') === 'true', ...(context ? { context } : {}),
-      ...(isEditable && (node.tagName === 'TEXTAREA' || node.isContentEditable) ? { multiline: true } : {}) };
+      ...(isEditable && (node.tagName === 'TEXTAREA' || node.isContentEditable) ? { multiline: true } : {}),
+      ...(node.tagName === 'INPUT' ? { inputType: node.type } : {}),
+      ...(node.required ? { required: true } : {}), ...(node.min ? { min: String(node.min) } : {}), ...(node.max ? { max: String(node.max) } : {}) };
     if (node.tagName === 'IMG' && node.complete && node.naturalWidth > 0) element.image = { url: node.currentSrc || node.src, width: node.naturalWidth, height: node.naturalHeight };
     if (isSecret) element.value = '[redacted]';
     else if ('value' in node && !['checkbox','radio','submit','button'].includes(node.type)) element.value = String(node.value).slice(0, 10000);

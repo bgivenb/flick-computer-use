@@ -94,7 +94,8 @@ async function route(req: IncomingMessage, res: ServerResponse) {
       res.end(page); return;
     }
     if (req.method === 'GET' && req.url === '/api/health') { json(res, 200, { model: config.model, keyConfigured: Boolean(config.apiKey),
-      groqConfigured: Boolean(config.groqApiKey), groqModel: config.groqApiKey ? config.groqModel : undefined }); return; }
+      textHelper: config.cerebrasApiKey ? { provider: 'cerebras', model: config.cerebrasModel }
+        : config.groqApiKey ? { provider: 'groq', model: config.groqModel } : null }); return; }
     if (req.method === 'GET' && req.url === '/api/task') {
       const result = task ? await (await client()).call('computer_status', { taskId: task.id, waitMs: 0 }) : null;
       if (result) task!.status = result.status;

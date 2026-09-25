@@ -60,6 +60,10 @@ export interface ElementInfo {
   image?: { url: string; width: number; height: number };
   options?: Array<{ value: string; label: string; selected: boolean; disabled: boolean }>;
   multiline?: boolean;
+  inputType?: string;
+  required?: boolean;
+  min?: string;
+  max?: string;
   modal?: boolean; // Part of the open menu or dialog.
 }
 export interface Observation {
@@ -120,7 +124,7 @@ export interface Decider {
     history: string[], signal: AbortSignal, context?: DecisionContext): Promise<Decision>;
 }
 export interface TextHelper {
-  compose(input: TaskInput, observation: Observation, field: ElementInfo, signal: AbortSignal): Promise<{ status: 'text' | 'need_input'; text: string }>;
+  compose(input: TaskInput, observation: Observation, field: ElementInfo, signal: AbortSignal): Promise<{ status: 'text' | 'need_input'; text: string; modelCalls?: number }>;
   repair(input: TaskInput, observation: Observation, history: string[], signal: AbortSignal): Promise<string>;
 }
 const roleNames: Record<string, string> = { AXLink: 'link', AXImage: 'image', AXStaticText: 'text', AXMenuItem: 'menu item', AXMenuBarItem: 'menu bar item',

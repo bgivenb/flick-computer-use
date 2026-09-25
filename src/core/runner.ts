@@ -176,16 +176,24 @@ export class TaskRunner {
             const field = observation.elements.find(e => e.id === action.elementId);
             if (!field || field.disabled || !field.actions.includes('fill')) throw new StaleObservationError();
             const helperStarted = performance.now();
-            task.metrics.helperCalls++;
             let draft: Awaited<ReturnType<TextHelper['compose']>>;
-            try { draft = await this.textHelper!.compose(input, observation, field, signal); }
+            try { draft = await this.textHelper!.compose(input, observation, field, signal); task.metrics.helperCalls += draft.modelCalls ?? 1; }
             catch (error) {
+              task.metrics.helperCalls += error instanceof Error && 'modelCalls' in error && typeof error.modelCalls === 'number' ? error.modelCalls : 1;
               signal.throwIfAborted();
               throw new RecoverableActionError('the text helper could not draft this field', 'Use a supplied value or another route; the helper may be temporarily unavailable.');
             } finally { task.metrics.helperMs += performance.now() - helperStarted; }
             signal.throwIfAborted();
             if (draft.status === 'need_input') throw new BlockedError(`The field ${JSON.stringify(field.name)} needs an exact value the task has not supplied.`);
-            pending = await driver.act({ kind: 'fill', elementId: field.id, value: draft.text }, observation, signal) ?? undefined;
+            let value = draft.text;
+            if (field.inputType === 'number') {
+              value = value.replace(/[$,\s]/g, '');
+              const numeric = Number(value);
+              if (!value || !Number.isFinite(numeric) ||
+                (field.min !== undefined && numeric < Number(field.min)) || (field.max !== undefined && numeric > Number(field.max)))
+                throw new RecoverableActionError('the drafted number did not fit the field', 'Choose another value or use an exact supplied number.');
+            }
+            pending = await driver.act({ kind: 'fill', elementId: field.id, value }, observation, signal) ?? undefined;
           } else pending = await driver.act(action, observation, signal) ?? undefined;
         }
         catch (error) {
