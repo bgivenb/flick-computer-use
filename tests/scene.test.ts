@@ -39,6 +39,7 @@ test('progress ignores text churn and geometry but not navigation, open layers, 
   const field: ElementInfo = { id: 'e8', role: 'textbox', name: 'Search', value: 'Elvis', disabled: false, actions: ['fill'], bounds: at(0, 0, 10, 10) };
   const base = scene([field], { text: 'Ad 1', clipboard: { changeCount: 5, hasImage: false } });
   assert.equal(progressDigest(base), progressDigest({ ...base, text: 'Ad 2', revision: 'other', elements: [{ ...field, bounds: at(5, 5, 10, 10) }] }));
+  assert.equal(progressDigest(base), progressDigest({ ...base, focusedId: 'other', elements: [{ ...field, focused: true }] }));
   for (const changed of [{ url: 'https://x.test/images' }, { modal: { kind: 'menu' as const } }, { elements: [{ ...field, value: 'Elvis Presley' }] }, { clipboard: { changeCount: 6, hasImage: true } }])
     assert.notEqual(progressDigest(base), progressDigest({ ...base, ...changed }));
 });

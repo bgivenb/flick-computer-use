@@ -92,12 +92,12 @@ export class TaskRunner {
     const signal = controller.signal;
     const started = performance.now();
     const history: string[] = [];
-    // Progress is judged on task state, not on every pixel of a changing page: an action repeated on the
-    // same progress digest is withdrawn after it twice changed nothing, and stops the task on a third try.
+    // Progress is judged on task state, not on every pixel or focus change. Repeated actions are
+    // withdrawn before the next Jev choice so a loop can recover through another available route.
     const attempts = new Map<string, number>(), futile = new Map<string, number>();
     const failed = new Map<string, { count: number; step: number }>();
     let idle = 0, staleStreak = 0;
-    let repairCount = 0;
+    let repairCount = 0, lastLoopRepairDigest: string | undefined;
     let pending: Observation | undefined;
     let previous: { action: Action; key: string; description: string; before: Observation; digest: string; event: Task['events'][number] } | undefined;
     let clipboardStart: number | undefined;
@@ -117,8 +117,8 @@ export class TaskRunner {
           const effect = describeEffect(previous.before, observation, previous.action);
           previous.event.effect = effect;
           history.push(`${previous.description} → ${effect}${observation.title !== previous.before.title ? `; now ${observation.title}` : ''}`);
-          // Scrolling that reveals new controls is progress even though the task state is unchanged.
-          const unchanged = digest === previous.digest && !(['scroll', 'scroll_top', 'scroll_bottom'].includes(previous.action.kind) && effect.includes('controls appeared'));
+          // Opening controls is progress even if the compact task digest did not change.
+          const unchanged = digest === previous.digest && !/\b[1-9]\d* controls appeared\b/.test(effect);
           if (unchanged) futile.set(`${previous.digest}|${previous.key}`, (futile.get(`${previous.digest}|${previous.key}`) ?? 0) + 1);
           idle = effect === 'no visible effect' ? idle + 1 : 0;
           previous = undefined;
@@ -136,10 +136,22 @@ export class TaskRunner {
           if (typeof candidate.action === 'string') continue;
           const failure = failed.get(`${digest}|${surface}|${actionKey(candidate.action)}`);
           if (failure && (failure.count >= 2 || failure.step === task.steps)) { unavailable.push(candidate.description); delete candidates[key]; }
-          else if ((futile.get(`${digest}|${actionKey(candidate.action)}`) ?? 0) >= 2) { withdrawn.push(candidate.description); delete candidates[key]; }
+          else if ((attempts.get(`${digest}|${actionKey(candidate.action)}`) ?? 0) >= 2 ||
+            (futile.get(`${digest}|${actionKey(candidate.action)}`) ?? 0) >= 2) { withdrawn.push(candidate.description); delete candidates[key]; }
         }
-        const note = withdrawn.length ? `Not offered again because repeating them changed nothing: ${withdrawn.slice(0, 5).join('; ')}` : '';
+        const note = withdrawn.length ? `These actions were tried twice in the same task state without advancing the goal and are unavailable for now: ${withdrawn.slice(0, 5).join('; ')}` : '';
         if (note && history.at(-1) !== note) history.push(note);
+        if (withdrawn.length && this.textHelper && repairCount < 2 && lastLoopRepairDigest !== digest) {
+          lastLoopRepairDigest = digest;
+          repairCount++;
+          const helperStarted = performance.now();
+          task.metrics.helperCalls++;
+          try {
+            const hint = await this.textHelper.repair(input, observation, history, signal);
+            if (hint) history.push(`Text helper recovery hint: ${hint}`);
+          } catch { signal.throwIfAborted(); }
+          finally { task.metrics.helperMs += performance.now() - helperStarted; }
+        }
         const failureNote = unavailable.length ? `Not offered again while the interface is unchanged because these actions failed: ${unavailable.slice(0, 5).join('; ')}` : '';
         if (failureNote && history.at(-1) !== failureNote) history.push(failureNote);
         const context = { conditions: task.verification.checks.map(c => ({ condition: describeCondition(c.condition, observation.targets), met: c.passed })),
@@ -168,7 +180,6 @@ export class TaskRunner {
         }
         const key = actionKey(selected.action);
         const signature = `${digest}|${key}`;
-        if ((attempts.get(signature) ?? 0) >= 2) throw new BlockedError('Repeated the same action on the same state without completing the task.');
         t = performance.now();
         try {
           const action = selected.action;

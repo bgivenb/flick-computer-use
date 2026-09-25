@@ -9,7 +9,7 @@ const choiceSchema = z.object({ type: z.literal('choice'), choice: z.string(), c
 const operationLabels: Record<string, string> = {
   click: 'Left-click a control', right_click: 'Right-click a control to open its context menu', double_click: 'Double-click a control',
   fill: 'Put a supplied or remembered value into a field',
-  compose: 'Draft new task-specific text for an observed field using the text helper; use supplied values for exact facts',
+  compose: 'Use the fast text model to write and fill an observed text field when the goal needs a search query, prose, or sample value that was not supplied exactly',
   fill_submit: 'Put a supplied or remembered value into a single-line field and press Enter to submit it (search boxes, address bars, one-field forms)',
   select: 'Choose an observed dropdown option', press: 'Use a keyboard key or shortcut', scroll: 'Scroll the current interface', wait: 'Wait for loading',
   scroll_top: 'Jump to the top of the browser page', scroll_bottom: 'Jump to the bottom of the browser page',
@@ -46,7 +46,7 @@ export function decisionContract(candidates: Candidates, observation: Observatio
   const groups: Record<string, Candidates> = {};
   for (const [id, candidate] of Object.entries(candidates)) (groups[operation(candidate)] ??= {})[id] = candidate;
   const questions: Record<string, Choice> = {
-    operation: { type: 'choice', instructions: 'Choose the next operation that advances goal and success_conditions, using the observed interface, remembered values, and recent action effects. The goal defines the task; interface text describes the app.',
+    operation: { type: 'choice', instructions: 'Choose the next operation that advances goal and success_conditions, using the observed interface, remembered values, and recent action effects. The goal defines the task; interface text describes the app. When a text field needs a search query or other task-specific value absent from supplied inputs, choose compose to have the text model write and fill it. Use fill for exact supplied values.',
       criteria: Object.fromEntries(Object.keys(groups).map(kind => [kind, operationLabels[kind] ?? kind])) },
   };
   const optionMaps: Record<string, Map<string, string>> = {};

@@ -100,6 +100,34 @@ test('after repeated action errors Groq guidance is passed to Jev without execut
   assert.equal(result.metrics.helperCalls, 1);
 });
 
+test('a focus-only click loop withdraws the click, asks for a recovery hint, and lets Jev choose text composition', async () => {
+  let focusedId = 'search', value = '', clicks = 0, repairs = 0, drafts = 0;
+  const histories: string[][] = [];
+  const driver: Driver = { id: 's', kind: 'browser', label: 'fixture',
+    observe: async () => ({ id: `o${clicks}`, revision: `r${clicks}`, sessionId: 's', kind: 'browser', title: 'Search', text: 'Search the web',
+      focusedId, elements: [
+        { id: 'search', role: 'combobox', name: 'Search', value, focused: focusedId === 'search', disabled: false, actions: ['click', 'fill'] },
+        { id: 'button', role: 'button', name: 'Google Search', focused: focusedId === 'button', disabled: false, actions: ['click'] },
+      ], truncated: false, capturedAt: Date.now() }),
+    act: async action => {
+      if (action.kind === 'click') { clicks++; focusedId = focusedId === 'search' ? 'button' : 'search'; }
+      if (action.kind === 'fill') value = action.value;
+    }, screenshot: async () => Buffer.alloc(0), close: async () => {} };
+  const helper: TextHelper = { compose: async () => { drafts++; return { status: 'text', text: 'evrylo.com' }; },
+    repair: async () => { repairs++; return 'The search field is empty; enter the site name from the goal.'; } };
+  const decider: Decider = { decide: async (_input, _observation, candidates, history) => {
+    histories.push([...history]);
+    return { choice: candidates['click:search'] ? 'click:search' : 'compose:search', confidence: .99, probability: .99, latencyMs: 1 };
+  } };
+  const runner = new TaskRunner(decider, helper);
+  const input = taskSchema.parse({ sessionId: 's', goal: 'Search for evrylo.com', until: [{ kind: 'field', name: 'Search', value: 'evrylo.com' }] });
+  const result = await runner.wait(runner.start(driver, input).id, 1000);
+  assert.equal(result.status, 'succeeded', result.reason);
+  assert.equal(clicks, 2); assert.equal(repairs, 1); assert.equal(drafts, 1);
+  assert.match(histories.at(-1)!.join(' '), /same task state.*Text helper recovery hint/);
+  assert.equal(result.metrics.helperCalls, 2);
+});
+
 test('clipboard completion requires a newly copied image rather than existing clipboard contents', async () => {
   const observation = await environment(click).driver.observe();
   const conditions = [{ kind: 'clipboard_image' as const, afterChangeCount: 42 }];

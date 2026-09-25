@@ -65,11 +65,11 @@ export function describeCondition(condition: Condition, targets: Observation['ta
   }
 }
 
-// Progress ignores incidental churn (animations, timestamps, geometry): only navigation, the open layer,
-// focus, form state, and the clipboard count as the task's state.
+// Progress ignores incidental churn (animations, timestamps, geometry) and focus-only clicks:
+// navigation, open layers, form state, and the clipboard count as the task's state.
 export function progressDigest(o: Observation) {
   const state = o.elements.filter(e => e.actions.includes('fill') || e.checked !== undefined || e.selected).map(e => [e.id, e.value, e.checked, e.selected]);
-  return createHash('sha256').update(JSON.stringify([o.targetId, o.url, o.title, o.modal, o.focusedId, o.clipboard?.changeCount,
+  return createHash('sha256').update(JSON.stringify([o.targetId, o.url, o.title, o.modal, o.clipboard?.changeCount,
     o.loading?.document, o.loading?.pendingImages, o.scroll?.y, state])).digest('hex').slice(0, 16);
 }
 

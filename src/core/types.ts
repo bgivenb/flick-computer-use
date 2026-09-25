@@ -218,7 +218,7 @@ export function candidatesFor(observation: Observation, inputs: Record<string, s
       if (!element.multiline) add(`submit:${element.id}:${index}`, { kind: 'fill', elementId: element.id, value, submit: true }, `Fill ${target} using supplied input ${JSON.stringify(name)} and press Enter`, label);
     });
     if (element.actions.includes('fill') && options.canCompose)
-      add(`compose:${element.id}`, { kind: 'compose', elementId: element.id }, `Ask the text helper to draft task-specific text for ${target}`, label);
+      add(`compose:${element.id}`, { kind: 'compose', elementId: element.id }, `Use the fast text model to write and fill ${target} for the current goal`, label);
     if (element.actions.includes('select')) (element.options ?? []).forEach((option, index) => {
       if (!option.disabled && !option.selected) add(`select:${element.id}:${index}`, { kind: 'select', elementId: element.id, value: option.value }, `Select ${JSON.stringify(option.label)} in ${target}`, `${JSON.stringify(option.label)} in ${label}`);
     });

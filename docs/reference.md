@@ -6,6 +6,8 @@ In browser tasks, Jev can choose a brief wait, wait for document load, wait for 
 
 On macOS, `npm run build:native` also installs a local Apple Vision image OCR helper. When normal browser observation misses rendered text, Jev can choose `scan_screen` within the same task. Flick captures the visible task tab, recognizes text locally, and offers those labels as on-screen click targets with coordinates. Before clicking one, it scans again and checks that the same label remains near the same point; changed targets are re-observed. The screenshot pixels never go to TypeSafe or the optional text helper. A scan adds latency only when chosen. `computer_inspect` with `ocr: "always"` can request the same browser scan explicitly. OCR cannot understand icons or image subjects.
 
+When Jev repeats an action in the same task state, Flick withdraws that action before the next decision and includes the loop in Jev's recent history. Focus-only clicks do not count as progress. If Cerebras or Groq is configured, Flick asks the text helper for one short recovery hint for that stalled state; Jev still chooses the next observed action. OCR remains an available choice when rendered text is missing, rather than a forced response to every repeated click. The task stops if no available action can satisfy its completion conditions.
+
 The demo app has its own localhost HTTP server, separate from the MCP transport.
 
 ## Browser session
