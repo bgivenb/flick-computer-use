@@ -18,5 +18,6 @@ export function loadConfig() {
     cerebrasModel: process.env.CEREBRAS_MODEL || 'qwen-3.8-27b',
     localDir,
     nativePath: resolve(root, '.local/bin/jev-macos'),
+    ocrImagePath: resolve(root, '.local/bin/flick-ocr-image'),
   };
 }

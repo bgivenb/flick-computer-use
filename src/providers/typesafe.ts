@@ -15,6 +15,7 @@ const operationLabels: Record<string, string> = {
   scroll_top: 'Jump to the top of the browser page', scroll_bottom: 'Jump to the bottom of the browser page',
   wait_for_load: 'Wait for the browser document to load', wait_for_change: 'Wait for visible browser content or resources to change',
   wait_for_images: 'Wait for loading browser images to finish',
+  scan_screen: 'Use local OCR to read rendered screen text and expose on-screen click targets',
   back: 'Go back in browser history', forward: 'Go forward in browser history', refresh: 'Refresh the browser page',
   switch: 'Open or switch to another app or browser', remember: 'Remember observed text for use later in the task',
   done: 'The goal and success conditions are satisfied', blocked: 'Further progress requires additional information or capabilities',

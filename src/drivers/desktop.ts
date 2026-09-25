@@ -35,9 +35,9 @@ export class DesktopDriver implements Driver {
     // Reserve once. Switching apps and browser work cannot release ownership halfway through a goal.
     if (targets.some(t => t.kind === 'macos')) this.native = factory.native();
   }
-  static open(targets: DesktopTarget[], config: { nativePath: string; localDir: string }, ocr: 'auto' | 'always' | 'off') {
+  static open(targets: DesktopTarget[], config: { nativePath: string; localDir: string; ocrImagePath?: string }, ocr: 'auto' | 'always' | 'off') {
     return new DesktopDriver(targets, { native: () => MacOSDriver.reserve(config.nativePath, ocr),
-      browser: options => BrowserDriver.open(options, config.localDir) });
+      browser: options => BrowserDriver.open({ ...options, ocrImagePath: config.ocrImagePath }, config.localDir) });
   }
   async observe(options?: { ocr?: 'auto' | 'always' | 'off' }): Promise<Observation> {
     const raw = this.active ? await this.active.driver.observe(options) : undefined;

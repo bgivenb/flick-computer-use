@@ -4,6 +4,8 @@ Flick runs an MCP server over stdio. There is no HTTP listener or separate Flick
 
 In browser tasks, Jev can choose a brief wait, wait for document load, wait for visible content to change, wait for loading images to finish, Back, Forward, Refresh, incremental scroll, or jump to the top or bottom. Flick reports document readiness, pending images, and page position in the observation. These are choices within the same task loop; the host assistant need not choose each recovery step. Document load does not imply that a single-page app has finished rendering, which is why the content-change wait is separate. Navigation and waits have short bounds and remain subject to the task timeout.
 
+On macOS, `npm run build:native` also installs a local Apple Vision image OCR helper. When normal browser observation misses rendered text, Jev can choose `scan_screen` within the same task. Flick captures the visible task tab, recognizes text locally, and offers those labels as on-screen click targets with coordinates. Before clicking one, it scans again and checks that the same label remains near the same point; changed targets are re-observed. The screenshot pixels never go to TypeSafe or the optional text helper. A scan adds latency only when chosen. `computer_inspect` with `ocr: "always"` can request the same browser scan explicitly. OCR cannot understand icons or image subjects.
+
 The demo app has its own localhost HTTP server, separate from the MCP transport.
 
 ## Browser session

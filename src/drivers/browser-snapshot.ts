@@ -63,6 +63,7 @@ export const snapshotScript = String.raw`(() => {
     const context = container && tidy(container.getAttribute('aria-label') || container.querySelector('legend,h1,h2,h3,[role="rowheader"],th')?.textContent);
     const element = { id, role: role || 'textbox', name, disabled, actions, focused: node === active,
       selected: node.getAttribute('aria-selected') === 'true', ...(context ? { context } : {}),
+      bounds: (() => { const box = node.getBoundingClientRect(); return { x: box.x, y: box.y, width: box.width, height: box.height }; })(),
       ...(isEditable && (node.tagName === 'TEXTAREA' || node.isContentEditable) ? { multiline: true } : {}),
       ...(node.tagName === 'INPUT' ? { inputType: node.type } : {}),
       ...(node.required ? { required: true } : {}), ...(node.min ? { min: String(node.min) } : {}), ...(node.max ? { max: String(node.max) } : {}) };

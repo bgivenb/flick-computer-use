@@ -58,12 +58,13 @@ export class MacOSDriver implements Driver {
   }
   async observe(options?: { ocr?: 'auto' | 'always' | 'off' }): Promise<Observation> {
     const result = await this.bridge.request('observe', { ocr: options?.ocr ?? this.ocr });
-    return { ...result, id: randomUUID(), sessionId: this.id, kind: this.kind, capturedAt: Date.now() };
+    return { ...result, ocrAvailable: this.ocr !== 'off', id: randomUUID(), sessionId: this.id, kind: this.kind, capturedAt: Date.now() };
   }
   async act(action: Action, observation: Observation, signal: AbortSignal) {
     signal.throwIfAborted();
     if (observation.sessionId !== this.id) throw new StaleObservationError();
     if (action.kind === 'wait') { await delay(200, undefined, { signal }); return; }
+    if (action.kind === 'scan_screen') return this.observe({ ocr: 'always' });
     if (action.kind === 'compose') throw new Error('Text composition runs in the task runner.');
     if (['wait_for_load', 'wait_for_change', 'wait_for_images', 'back', 'forward', 'refresh', 'scroll_top', 'scroll_bottom'].includes(action.kind))
       throw new Error('This action requires a browser session.');

@@ -13,6 +13,7 @@ export const actionSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('wait_for_load') }),
   z.object({ kind: z.literal('wait_for_change') }),
   z.object({ kind: z.literal('wait_for_images') }),
+  z.object({ kind: z.literal('scan_screen') }),
   z.object({ kind: z.literal('back') }),
   z.object({ kind: z.literal('forward') }),
   z.object({ kind: z.literal('refresh') }),
@@ -81,6 +82,7 @@ export interface Observation {
   truncated: boolean;
   capturedAt: number;
   ocr?: { used: boolean; durationMs?: number; reason?: string };
+  ocrAvailable?: boolean;
   clipboard?: { changeCount: number; hasImage: boolean };
   focusedId?: string;
   modal?: { kind: 'menu' | 'dialog'; label?: string };
@@ -177,6 +179,8 @@ export function candidatesFor(observation: Observation, inputs: Record<string, s
   if (observation.kind === 'desktop' && !observation.targetId) {
     for (const key of ['scroll_down', 'scroll_up', 'enter', 'tab', 'escape', 'wait']) delete candidates[key];
   }
+  if (observation.ocrAvailable && !observation.ocr?.used)
+    candidates.scan_screen = { action: { kind: 'scan_screen' }, description: 'Read rendered text from a local screenshot when visible page content or controls are missing from the ordinary observation.' };
   const inBrowser = observation.kind === 'browser' || (observation.kind === 'desktop' && Boolean(observation.url));
   if (inBrowser && !observation.modal) {
     candidates.wait_for_change = { action: { kind: 'wait_for_change' }, description: 'Wait up to 3 seconds for visible content or resources to update.' };

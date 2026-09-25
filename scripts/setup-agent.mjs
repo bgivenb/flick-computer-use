@@ -6,7 +6,7 @@ import { resolve } from 'node:path';
 const root = fileURLToPath(new URL('../', import.meta.url));
 const args = new Set(process.argv.slice(2));
 if (args.has('--help')) {
-  console.log('Usage: node scripts/setup-agent.mjs [--native]\nInstalls pinned dependencies, builds the MCP, installs Chromium, and creates .env.local only when missing.\n--native also builds the experimental Swift helper on macOS. It does not change OS permissions.');
+  console.log('Usage: node scripts/setup-agent.mjs [--native]\nInstalls pinned dependencies, builds the MCP, installs Chromium, and creates .env.local only when missing.\n--native also builds the Swift macOS control and browser OCR helpers. It does not change OS permissions.');
   process.exit(0);
 }
 if ([...args].some(arg => arg !== '--native')) throw new Error('Unknown option. Use --help.');

@@ -76,7 +76,7 @@ The user enables `chrome://inspect/#remote-debugging` and approves Chrome's Allo
 
 Delegate a complete goal to `computer_run` with available exact input values and observable `until` conditions. When a text helper is configured, Jev may draft missing prose or search queries for observed fields. Specific account facts still need exact supplied or observed values. Poll `computer_status`; do not make a host-model call for each click. Use `computer_execute` when Jev should choose among browser/native apps. Use `computer_screenshot` and `computer_continue` when visual interpretation or missing text is needed. Jev performs the subsequent actions.
 
-For native apps, build the helper and have the user grant the launching application Accessibility permission. Screenshots and OCR also need Screen Recording permission. Call `computer_health` to check those permissions.
+For native apps and browser OCR fallback on macOS, build the helpers with `npm run build:native` (or use `node scripts/setup-agent.mjs --native`). Native app control requires Accessibility permission, and native window capture requires Screen Recording permission. Browser OCR processes the task tab screenshot locally. Call `computer_health` to check availability.
 
 [Tool contracts, examples, and limitations](docs/reference.md)
 

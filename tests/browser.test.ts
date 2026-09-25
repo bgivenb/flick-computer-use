@@ -3,10 +3,32 @@ import assert from 'node:assert/strict';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { existsSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
 import { fixture } from './fixture.js';
 import { BrowserDriver } from '../src/drivers/browser.js';
 import { StaleObservationError, candidatesFor } from '../src/core/types.js';
+
+const ocrImagePath = fileURLToPath(new URL('../.local/bin/flick-ocr-image', import.meta.url));
+test('real browser: Jev can request local OCR and click a canvas-only label', { skip: process.platform !== 'darwin' || !existsSync(ocrImagePath) }, async t => {
+  const web = await fixture(); const dir = await mkdtemp(join(tmpdir(), 'jev-ocr-test-'));
+  t.after(async () => { await web.close(); await rm(dir, { recursive: true, force: true }); });
+  const driver = await BrowserDriver.open({ url: web.url + '/canvas-ocr', headless: true, ocrImagePath }, dir);
+  try {
+    const signal = new AbortController().signal;
+    const before = await driver.observe();
+    assert.equal(before.elements.some(e => /OPEN PAINTED PANEL/.test(e.name)), false);
+    assert.ok(candidatesFor(before, {}).scan_screen);
+    const scanned = (await driver.act({ kind: 'scan_screen' }, before, signal))!;
+    assert.equal(scanned.ocr?.used, true);
+    const label = scanned.elements.find(e => e.source === 'ocr' && /OPEN PAINTED PANEL/.test(e.name));
+    assert.ok(label, JSON.stringify(scanned.elements.filter(e => e.source === 'ocr').map(e => e.name)));
+    assert.equal(candidatesFor(scanned, {}).scan_screen, undefined);
+    await driver.act({ kind: 'click', elementId: label.id }, scanned, signal);
+    assert.match((await driver.observe()).text, /Canvas panel opened/);
+  } finally { await driver.close(); }
+});
 
 test('real browser: form flow, stale observation rejection, and independent saved state', async t => {
   const web = await fixture(); const dir = await mkdtemp(join(tmpdir(), 'jev-test-'));

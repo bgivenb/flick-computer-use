@@ -67,11 +67,12 @@ export function createServer(config = loadConfig()) {
       textHelper: config.cerebrasApiKey ? { provider: 'cerebras', model: config.cerebrasModel }
         : config.groqApiKey ? { provider: 'groq', model: config.groqModel } : null, native,
       capabilities: { browser: true, macos: process.platform === 'darwin', goalAcrossApps: true, taskMemory: true, factoredDecisions: true,
-        generatedText: Boolean(config.cerebrasApiKey || config.groqApiKey), recoveryHints: Boolean(config.cerebrasApiKey || config.groqApiKey), ocr: process.platform === 'darwin' && existsSync(config.nativePath) },
-      dataFlow: 'Browser/desktop controls are read locally. Jev tasks send selected interface text and supplied inputs to TypeSafe. When configured and chosen, the configured text helper receives the goal, chosen field, and selected page text for drafting; after repeated failures it receives recent errors and controls for a recovery hint. No screenshots are sent to either model.' });
+        generatedText: Boolean(config.cerebrasApiKey || config.groqApiKey), recoveryHints: Boolean(config.cerebrasApiKey || config.groqApiKey),
+        ocr: process.platform === 'darwin' && existsSync(config.nativePath), browserOcr: process.platform === 'darwin' && existsSync(config.ocrImagePath) },
+      dataFlow: 'Browser/desktop controls are read locally. Jev tasks send selected interface text and supplied inputs to TypeSafe. When chosen, local Apple Vision OCR reads a screenshot and its recognized text is added to the observation; the screenshot stays local. The configured text helper receives the goal, chosen field, and selected page text for drafting; after repeated failures it receives recent errors and controls for a recovery hint. No screenshots are sent to either model.' });
   }));
   server.registerTool('computer_open', {
-    description: 'Open a dedicated browser, connect to existing Chrome in a new task tab, or connect to a native macOS app. Browser tasks can navigate across sites by default. Supply allowedOrigins only to opt into a navigation restriction. Existing Chrome uses the running profile and Chrome’s user-approved remote-debugging flow. Native OCR runs locally.',
+    description: 'Open a dedicated browser, connect to existing Chrome in a new task tab, or connect to a native macOS app. Browser tasks can navigate across sites by default. Supply allowedOrigins only to opt into a navigation restriction. Existing Chrome uses the running profile and Chrome’s user-approved remote-debugging flow. Optional OCR runs locally.',
     inputSchema: {
       kind: z.enum(['browser', 'macos']).default('browser'), url: z.string().url().optional(),
       headless: z.boolean().default(false), profile: z.string().regex(/^[a-zA-Z0-9_-]{1,60}$/).default('default'),
@@ -85,7 +86,8 @@ export function createServer(config = loadConfig()) {
     let driver: Driver;
     if (args.kind === 'browser') {
       if (!args.url) throw new Error('Supply a starting URL for a browser session.');
-      driver = await BrowserDriver.open({ ...args, recordVideoDir: args.recordVideo ? resolve(config.localDir, 'recordings') : undefined }, config.localDir);
+      driver = await BrowserDriver.open({ ...args, ocrImagePath: config.ocrImagePath,
+        recordVideoDir: args.recordVideo ? resolve(config.localDir, 'recordings') : undefined }, config.localDir);
     } else {
       if (!args.bundleId) throw new Error('Supply bundleId from computer_apps for a native session.');
       if (desktopOwned()) throw new Error('Only one native desktop session can own the desktop at a time.');
@@ -123,8 +125,8 @@ export function createServer(config = loadConfig()) {
     if (!observation || observation.sessionId !== sessionId) throw new Error('Unknown observation. Inspect this session again.');
     manual.add(sessionId);
     try {
-      await driver.act(action, observation, AbortSignal.timeout(10000));
-      return json(remember(await driver.observe()));
+      const result = await driver.act(action, observation, AbortSignal.timeout(10000));
+      return json(remember(result ?? await driver.observe()));
     } finally { manual.delete(sessionId); }
   }));
   server.registerTool('computer_run', {

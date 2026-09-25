@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
+import { existsSync } from 'node:fs';
 import { mkdir, readFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { resolve } from 'node:path';
@@ -6,8 +7,9 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { chromium, type Browser, type BrowserContext, type Frame, type Page, type ElementHandle } from 'playwright';
 import { RecoverableActionError, StaleObservationError, type Action, type Driver, type ElementInfo, type Observation } from '../core/types.js';
 import { snapshotScript } from './browser-snapshot.js';
+import { recognizeImage } from './image-ocr.js';
 
-export interface BrowserOptions { url: string; headless?: boolean; profile?: string; allowedOrigins?: string[]; browser?: 'chromium' | 'chrome'; connection?: 'dedicated' | 'existing-chrome'; recordVideoDir?: string }
+export interface BrowserOptions { url: string; headless?: boolean; profile?: string; allowedOrigins?: string[]; browser?: 'chromium' | 'chrome'; connection?: 'dedicated' | 'existing-chrome'; recordVideoDir?: string; ocrImagePath?: string }
 type Reference = { frame: Frame; localId: string; epoch: string; imageUrl?: string };
 function navigationOrigins(start: URL, allowedOrigins?: string[]) {
   if (!allowedOrigins?.length) return undefined;
@@ -26,7 +28,7 @@ export class BrowserDriver implements Driver {
   private references = new Map<string, Map<string, Reference>>();
   private ownedPages = new Set<Page>();
   private constructor(private context: BrowserContext, private page: Page, private origins: Set<string> | undefined, browser: string,
-    private connectedBrowser?: Browser) {
+    private connectedBrowser?: Browser, private ocrImagePath?: string) {
     this.label = connectedBrowser ? 'Google Chrome (existing profile, task tab)' : `${browser === 'chrome' ? 'Google Chrome' : 'Chromium'} (dedicated automation profile)`;
     const adopt = (page: Page) => {
       this.ownedPages.add(page); this.page = page;
@@ -65,7 +67,7 @@ export class BrowserDriver implements Driver {
       }
       const page = context.pages()[0] ?? await context.newPage();
       await page.goto(url.href, { waitUntil: 'domcontentloaded', timeout: 20000 });
-      return new BrowserDriver(context, page, origins, options.browser ?? 'chromium');
+      return new BrowserDriver(context, page, origins, options.browser ?? 'chromium', undefined, options.ocrImagePath);
     } catch (error) { await context.close(); throw error; }
   }
   private static async approvedChrome(endpoint: string) {
@@ -117,7 +119,7 @@ export class BrowserDriver implements Driver {
       const context = browser.contexts()[0];
       if (!context) throw new Error('The connected Chrome did not expose a browser context.');
       page = await context.newPage();
-      const driver = new BrowserDriver(context, page, origins, 'chrome', browser);
+      const driver = new BrowserDriver(context, page, origins, 'chrome', browser, options.ocrImagePath);
       if (origins) {
         // Scope an explicit restriction to this task's tab, never the user's whole browser context.
         await page.route('**/*', route => {
@@ -137,7 +139,7 @@ export class BrowserDriver implements Driver {
     if (this.page.isClosed()) throw new Error('The browser tab was closed. Open a new session.');
     if (this.origins && !this.origins.has(new URL(this.page.url()).origin)) throw new Error('This page is outside the session’s explicitly allowed origins.');
   }
-  async observe(): Promise<Observation> {
+  async observe(options?: { ocr?: 'auto' | 'always' | 'off' }, signal?: AbortSignal): Promise<Observation> {
     this.assertOpen();
     const elements: ElementInfo[] = [];
     const texts: string[] = [];
@@ -150,12 +152,14 @@ export class BrowserDriver implements Driver {
     const frames = this.page.frames();
     for (let index = 0; index < frames.length; index++) {
       const frame = frames[index];
+      let frameOffset = { x: 0, y: 0 };
       if (index > 0) {
         const element = await frame.frameElement().catch(() => null);
         const rect = await element?.boundingBox();
         const visible = await element?.isVisible();
         await element?.dispose();
         if (!visible || !rect || rect.width <= 0 || rect.height <= 0 || rect.y > 900 || rect.x > 1280 || rect.x + rect.width < 0 || rect.y + rect.height < 0) continue;
+        frameOffset = { x: rect.x, y: rect.y };
       }
       let snapshot: { epoch: string; text: string; elements: ElementInfo[]; truncated: boolean; scroll: number[]; focus: string[];
         loadState: 'loading' | 'interactive' | 'complete'; pendingImages: number };
@@ -174,10 +178,47 @@ export class BrowserDriver implements Driver {
         const id = `f${index}_${element.id}`;
         refs.set(id, { frame, localId: element.id, epoch: snapshot.epoch, imageUrl: element.image?.url });
         const image = element.image ? { ...element.image, url: /^(data|blob):/.test(element.image.url) ? '[embedded image]' : element.image.url } : undefined;
-        elements.push({ ...element, id, ...(image ? { image } : {}) });
+        const bounds = element.bounds ? { ...element.bounds, x: element.bounds.x + frameOffset.x, y: element.bounds.y + frameOffset.y } : undefined;
+        elements.push({ ...element, id, ...(bounds ? { bounds } : {}), ...(image ? { image } : {}) });
       }
     }
     const url = this.page.url();
+    const ocrAvailable = Boolean(this.ocrImagePath && existsSync(this.ocrImagePath));
+    let ocr: Observation['ocr'];
+    if (options?.ocr === 'always') {
+      if (!ocrAvailable) ocr = { used: false, reason: 'Build the local OCR helper with npm run build:native.' };
+      else {
+        const started = Date.now();
+        try {
+          const png = await this.page.screenshot({ type: 'png', timeout: 5000 });
+          signal?.throwIfAborted();
+          const viewport = await this.page.evaluate(() => ({ width: innerWidth, height: innerHeight }));
+          const result = await recognizeImage(this.ocrImagePath!, png, signal);
+          signal?.throwIfAborted();
+          if (this.page.url() !== url) throw new StaleObservationError();
+          const scaleX = viewport.width / result.width, scaleY = viewport.height / result.height;
+          const normalized = (s: string) => s.replace(/\s+/g, ' ').trim().toLowerCase();
+          for (const line of result.lines) {
+            const name = line.text.trim();
+            if (!name || line.confidence < 0.25 || line.width < 2 || line.height < 2) continue;
+            const bounds = { x: line.x * scaleX, y: line.y * scaleY, width: line.width * scaleX, height: line.height * scaleY };
+            if (bounds.x < 0 || bounds.y < 0 || bounds.x + bounds.width > viewport.width + 2 || bounds.y + bounds.height > viewport.height + 2) continue;
+            const covered = elements.some(e => e.bounds && normalized(e.name) === normalized(name) &&
+              Math.abs(e.bounds.x + e.bounds.width / 2 - bounds.x - bounds.width / 2) < Math.max(24, bounds.width) &&
+              Math.abs(e.bounds.y + e.bounds.height / 2 - bounds.y - bounds.height / 2) < Math.max(18, bounds.height));
+            if (covered) continue;
+            elements.push({ id: `ocr:${elements.filter(e => e.source === 'ocr').length}`, role: 'text', name: name.slice(0, 200),
+              disabled: false, actions: ['click'], source: 'ocr', confidence: line.confidence, bounds });
+            texts.push(name);
+            if (elements.filter(e => e.source === 'ocr').length >= 80) { truncated = true; break; }
+          }
+          ocr = { used: true, durationMs: Date.now() - started };
+        } catch (error) {
+          if (signal?.aborted || error instanceof StaleObservationError) throw error;
+          ocr = { used: false, durationMs: Date.now() - started, reason: 'Local OCR scan failed.' };
+        }
+      }
+    }
     const text = texts.join('\n').slice(0, 24000);
     const id = randomUUID();
     this.references.set(id, refs);
@@ -185,6 +226,7 @@ export class BrowserDriver implements Driver {
     return { id, revision: createHash('sha256').update(JSON.stringify([url, revisions])).digest('hex'),
       sessionId: this.id, kind: this.kind, title: await this.page.title(), url,
       text, elements, truncated: truncated || texts.join('\n').length > 24000, capturedAt: Date.now(),
+      ocrAvailable: ocrAvailable && ocr?.reason !== 'Local OCR scan failed.', ...(ocr ? { ocr } : {}),
       ...(focusedId ? { focusedId } : {}), ...(loading ? { loading } : {}), ...(scroll ? { scroll } : {}) };
   }
   private async waitForChange(observation: Observation, signal: AbortSignal) {
@@ -206,6 +248,7 @@ export class BrowserDriver implements Driver {
     this.assertOpen();
     if (observation.sessionId !== this.id) throw new StaleObservationError();
     if (action.kind === 'wait') { await delay(200, undefined, { signal }); return; }
+    if (action.kind === 'scan_screen') return this.observe({ ocr: 'always' }, signal);
     if (action.kind === 'compose') throw new Error('Text composition runs in the task runner.');
     if (action.kind === 'wait_for_change') return this.waitForChange(observation, signal);
     if (action.kind === 'wait_for_images') {
@@ -245,6 +288,20 @@ export class BrowserDriver implements Driver {
       return this.observe();
     }
     if (action.kind === 'switch' || action.kind === 'remember') throw new Error('Use a desktop session for switching and memory.');
+    if (action.kind === 'click' && action.elementId.startsWith('ocr:')) {
+      const target = observation.elements.find(e => e.id === action.elementId && e.source === 'ocr');
+      if (!target?.bounds || observation.url !== this.page.url()) throw new StaleObservationError();
+      const freshOCR = await this.observe({ ocr: 'always' }, signal);
+      const match = freshOCR.elements.find(e => e.source === 'ocr' && e.name === target.name && e.bounds &&
+        Math.hypot((e.bounds.x + e.bounds.width / 2) - (target.bounds!.x + target.bounds!.width / 2),
+          (e.bounds.y + e.bounds.height / 2) - (target.bounds!.y + target.bounds!.height / 2)) < 35);
+      if (!match?.bounds) throw new StaleObservationError();
+      signal.throwIfAborted();
+      await this.page.mouse.click(match.bounds.x + match.bounds.width / 2, match.bounds.y + match.bounds.height / 2,
+        { button: action.button, clickCount: action.clickCount });
+      await delay(40, undefined, { signal });
+      return;
+    }
     // Unrelated page changes do not invalidate a decision: only the target's identity (or, for a key, the
     // observed focus) must still match. Playwright separately checks visibility, stability, and occlusion.
     const fresh = await this.observe();

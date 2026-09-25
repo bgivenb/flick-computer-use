@@ -38,7 +38,7 @@ npm run doctor
 npm run test:live                 # actual Jev calls, disposable local form
 ```
 
-Merge the generated `flick` entry into your MCP client's configuration. It launches `node /absolute/path/dist/cli.js` and loads `.env.local` from the installation directory. For native macOS support, add `--native` to setup and grant Accessibility permission to the launching app. Screenshots and OCR also need Screen Recording permission.
+Merge the generated `flick` entry into your MCP client's configuration. It launches `node /absolute/path/dist/cli.js` and loads `.env.local` from the installation directory. For native macOS support and the optional browser OCR fallback, add `--native` to setup. Native app control needs Accessibility permission; native window capture needs Screen Recording permission. Browser OCR reads the browser tab screenshot locally.
 
 ## Use it
 
@@ -65,6 +65,7 @@ Optionally set `CEREBRAS_API_KEY` in `.env.local` to let Jev request text for an
 MCP client ── goal + inputs + completion conditions ──► local runner
                                                           │
                          ┌── observe ◄── DOM / macOS AX ◄──┤
+                         │       ╰── optional local OCR ◄──┤
                          │                                │
                          └── Jev typed decision ──► execute + verify
                                    │
@@ -75,7 +76,7 @@ MCP client ◄──────── result / trace / assistance needed ──
 
 Jev selects bounded actions against observed controls. Code owns exact values, target identity, execution, task memory, and completion checks. Related judgments share a request. Invalid field/value combinations can be withdrawn and reconsidered without executing an action; traces count these extra calls.
 
-The engine runs locally; inference uses the TypeSafe API and, when configured and selected, Cerebras or Groq. Goals, inputs, selected interface text, and memory are sent to TypeSafe. Qwen receives the user goal, current page, and observed form with Jev's chosen field when drafting, or recent errors and current controls when helping recovery. Screenshots are available to the host agent. Jev itself receives text and structured controls, not images. Native OCR reads text locally through Apple Vision.
+The engine runs locally; inference uses the TypeSafe API and, when configured and selected, Cerebras or Groq. Goals, inputs, selected interface text, and memory are sent to TypeSafe. Qwen receives the user goal, current page, and observed form with Jev's chosen field when drafting, or recent errors and current controls when helping recovery. Jev can call a local Apple Vision OCR scan when page text or controls are missing from the DOM; recognized labels become click targets. Screenshots are available to the host agent, but neither Jev nor Qwen receives image pixels.
 
 ## Benchmarks and development
 
@@ -88,7 +89,7 @@ npm run demo:record              # uncut recording, actual playback speed
 
 The optional Dispatch fixture is a local task-and-export workflow with eleven independent saved-state checks. One six-trial batch passed 6/6 at a **6.10 s median** for 13–14 actions, with zero host interventions. It is a synthetic local benchmark application, separate from the MCP. [Results and method](docs/benchmarks.md) · [Recording guide](docs/demo.md) · [Contributing](CONTRIBUTING.md)
 
-Early developer release. Browser DOM control is the primary path; native macOS control is experimental. Existing-profile discovery currently targets macOS. Canvas interfaces, closed shadow roots, complex widgets, and native dialogs can need host assistance. Automatic visual handoff is not implemented. Task traces can contain input values; inspect them before sharing. [Data handling and limitations](docs/reference.md)
+Early developer release. Browser DOM control is the primary path; native macOS control is experimental. Existing-profile discovery and local OCR currently target macOS. OCR reads text, not the visual meaning of photos or icon-only controls; complex widgets and native dialogs can still need host assistance. Automatic visual handoff is not implemented. Task traces can contain input values; inspect them before sharing. [Data handling and limitations](docs/reference.md)
 
 ## Credits
 

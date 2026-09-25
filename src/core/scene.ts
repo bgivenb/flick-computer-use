@@ -76,6 +76,8 @@ export function progressDigest(o: Observation) {
 const shortUrl = (url: string) => { try { const u = new URL(url); return `${u.host}${u.pathname}`.slice(0, 100); } catch { return url.slice(0, 100); } };
 export function describeEffect(before: Observation, after: Observation, action: Action) {
   const notes: string[] = [];
+  if (action.kind === 'scan_screen' && after.ocr?.used)
+    notes.push(`OCR found ${after.elements.filter(e => e.source === 'ocr').length} on-screen text targets`);
   if (before.targetId !== after.targetId) notes.push(`now in ${after.targetId ?? 'no app'}`);
   if (after.url && before.url !== after.url) notes.push(`the address changed to ${shortUrl(after.url)}`);
   else if (before.title !== after.title) notes.push(`the window title changed to ${JSON.stringify(after.title.slice(0, 80))}`);
@@ -101,7 +103,8 @@ export function describeEffect(before: Observation, after: Observation, action: 
   if (before.scroll && after.scroll && before.scroll.y !== after.scroll.y)
     notes.push(`scrolled to page position ${after.scroll.y}`);
   if (!notes.length) {
-    const was = new Set(before.elements.map(e => e.id)), is = new Set(after.elements.map(e => e.id));
+    const was = new Set(before.elements.filter(e => e.source !== 'ocr').map(e => e.id));
+    const is = new Set(after.elements.filter(e => e.source !== 'ocr').map(e => e.id));
     const added = [...is].filter(k => !was.has(k)).length, removed = [...was].filter(k => !is.has(k)).length;
     if (added || removed) notes.push(`${added} controls appeared and ${removed} disappeared`);
     else if (before.text !== after.text) notes.push('some text changed');
