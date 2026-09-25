@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { performance } from 'node:perf_hooks';
 import { setTimeout as delay } from 'node:timers/promises';
-import { BlockedError, candidatesFor, RecoverableActionError, StaleObservationError, verify, type Action, type Condition, type Decider, type DecisionTrace, type Driver, type Observation, type TaskInput, type TextHelper } from './types.js';
+import { BlockedError, candidatesFor, RecoverableActionError, StaleObservationError, TextHelperUnavailableError, verify, type Action, type Condition, type Decider, type DecisionTrace, type Driver, type Observation, type TaskInput, type TextHelper } from './types.js';
 import { describeCondition, describeEffect, focusView, progressDigest } from './scene.js';
 
 export type Status = 'running' | 'succeeded' | 'blocked' | 'failed' | 'cancelled' | 'timed_out';
@@ -192,6 +192,8 @@ export class TaskRunner {
             catch (error) {
               task.metrics.helperCalls += error instanceof Error && 'modelCalls' in error && typeof error.modelCalls === 'number' ? error.modelCalls : 1;
               signal.throwIfAborted();
+              if (error instanceof TextHelperUnavailableError)
+                throw new BlockedError(`Text helper unavailable: ${error.message}. Configure another provider or supply the exact value, then continue the task.`);
               throw new RecoverableActionError('the text helper could not draft this field', 'Use a supplied value or another route; the helper may be temporarily unavailable.');
             } finally { task.metrics.helperMs += performance.now() - helperStarted; }
             signal.throwIfAborted();

@@ -5,7 +5,7 @@ import { TaskRunner } from './core/runner.js';
 import { BrowserDriver } from './drivers/browser.js';
 import { MacOSDriver, NativeBridge } from './drivers/macos.js';
 import { TypeSafeDecider } from './providers/typesafe.js';
-import { CerebrasTextHelper, GroqTextHelper } from './providers/text-helper.js';
+import { CerebrasTextHelper, FallbackTextHelper, GroqTextHelper } from './providers/text-helper.js';
 import { loadConfig } from './config.js';
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -22,7 +22,9 @@ export function createServer(config = loadConfig()) {
   let openingNative = false;
   const runner = new TaskRunner(config.apiKey ? new TypeSafeDecider(config.apiKey, config.model) : {
     decide: async () => { throw new Error('Set TYPESAFE_API_KEY in .env.local before running Jev tasks. Direct inspection and actions work without it.'); },
-  }, config.cerebrasApiKey ? new CerebrasTextHelper(config.cerebrasApiKey, config.cerebrasModel)
+  }, config.cerebrasApiKey && config.groqApiKey ? new FallbackTextHelper(
+    new CerebrasTextHelper(config.cerebrasApiKey, config.cerebrasModel), new GroqTextHelper(config.groqApiKey, config.groqModel))
+    : config.cerebrasApiKey ? new CerebrasTextHelper(config.cerebrasApiKey, config.cerebrasModel)
     : config.groqApiKey ? new GroqTextHelper(config.groqApiKey, config.groqModel) : undefined);
   const workflows = new WorkflowRunner(runner, (bundleId, ocr) => MacOSDriver.open(bundleId, config.nativePath, ocr));
   const desktopOwned = () => openingNative || workflows.busy() || [...sessions.values()].some(s => s.kind === 'macos' || s.kind === 'desktop');
@@ -64,7 +66,8 @@ export function createServer(config = loadConfig()) {
       finally { bridge.close(); }
     }
     return json({ version: '0.1.0', transport: 'stdio', apiKeyConfigured: Boolean(config.apiKey), model: config.model,
-      textHelper: config.cerebrasApiKey ? { provider: 'cerebras', model: config.cerebrasModel }
+      textHelper: config.cerebrasApiKey ? { provider: 'cerebras', model: config.cerebrasModel,
+        ...(config.groqApiKey ? { fallback: { provider: 'groq', model: config.groqModel } } : {}) }
         : config.groqApiKey ? { provider: 'groq', model: config.groqModel } : null, native,
       capabilities: { browser: true, macos: process.platform === 'darwin', goalAcrossApps: true, taskMemory: true, factoredDecisions: true,
         generatedText: Boolean(config.cerebrasApiKey || config.groqApiKey), recoveryHints: Boolean(config.cerebrasApiKey || config.groqApiKey),

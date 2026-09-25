@@ -8,6 +8,8 @@ On macOS, `npm run build:native` also installs a local Apple Vision image OCR he
 
 When Jev repeats an action in the same task state, Flick withdraws that action before the next decision and includes the loop in Jev's recent history. Focus-only clicks do not count as progress. If Cerebras or Groq is configured, Flick asks the text helper for one short recovery hint for that stalled state; Jev still chooses the next observed action. OCR remains an available choice when rendered text is missing, rather than a forced response to every repeated click. The task stops if no available action can satisfy its completion conditions.
 
+When both text-provider keys are configured, Cerebras is tried first. If it fails, Flick uses Groq for the same field and temporarily skips Cerebras on later helper calls. If neither provider can answer, the task stops with their HTTP or connection failure summarized in the task reason instead of repeatedly attempting the same unavailable service.
+
 The demo app has its own localhost HTTP server, separate from the MCP transport.
 
 ## Browser session

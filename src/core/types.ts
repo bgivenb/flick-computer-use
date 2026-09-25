@@ -110,6 +110,9 @@ export class RecoverableActionError extends Error {
   constructor(readonly reason: string, readonly guidance: string) { super(`Browser action failed: ${reason}.`); }
 }
 export class BlockedError extends Error {}
+export class TextHelperUnavailableError extends Error {
+  constructor(message: string, readonly modelCalls = 1) { super(message); }
+}
 // description names the whole action for logs; label names only its target for a Choice option.
 export type Candidate = { action: Action | 'blocked' | 'done'; description: string; label?: string };
 export type Candidates = Record<string, Candidate>;

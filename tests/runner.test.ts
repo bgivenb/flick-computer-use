@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { setTimeout as delay } from 'node:timers/promises';
 import { TaskRunner } from '../src/core/runner.js';
-import { taskSchema, type Driver, type Observation, type Decider, type TextHelper, RecoverableActionError, StaleObservationError, candidatesFor, verify } from '../src/core/types.js';
+import { taskSchema, type Driver, type Observation, type Decider, type TextHelper, RecoverableActionError, StaleObservationError, TextHelperUnavailableError, candidatesFor, verify } from '../src/core/types.js';
 
 // churn: every observation differs (text, revision) while the task state does not, like a live results page.
 function environment(decider: Decider, options: { stale?: boolean; alreadyDone?: boolean; mutate?: boolean; churn?: boolean; challenge?: boolean } = {}) {
@@ -60,6 +60,22 @@ test('Qwen asking for a missing exact fact does not write to the interface', asy
   const input = taskSchema.parse({ sessionId: 's', goal: 'Fill account number', until: [{ kind: 'text', text: 'Saved' }] });
   const result = await runner.wait(runner.start(driver, input).id, 1000);
   assert.equal(result.status, 'blocked'); assert.equal(writes, 0); assert.match(result.reason ?? '', /exact value/);
+});
+
+test('a text-provider outage stops with its provider error instead of burning eight actions', async () => {
+  const field = { id: 'search', role: 'combobox', name: 'Search', disabled: false, actions: ['fill' as const] };
+  const driver: Driver = { id: 's', kind: 'browser', label: 'fixture',
+    observe: async () => ({ id: 'o', revision: 'r', sessionId: 's', kind: 'browser', title: 'Search', text: '', elements: [field],
+      truncated: false, capturedAt: Date.now() }),
+    act: async () => { throw new Error('No action should execute.'); }, screenshot: async () => Buffer.alloc(0), close: async () => {} };
+  const helper: TextHelper = { compose: async () => { throw new TextHelperUnavailableError('cerebras compose returned HTTP 503; groq compose returned HTTP 503', 2); },
+    repair: async () => '' };
+  const runner = new TaskRunner({ decide: async () => ({ choice: 'compose:search', confidence: 1, probability: 1, latencyMs: 1 }) }, helper);
+  const input = taskSchema.parse({ sessionId: 's', goal: 'Search for evrylo.com', until: [{ kind: 'text', text: 'Found' }] });
+  const result = await runner.wait(runner.start(driver, input).id, 1000);
+  assert.equal(result.status, 'blocked'); assert.equal(result.steps, 0);
+  assert.equal(result.metrics.helperCalls, 2); assert.equal(result.metrics.actionRecoveries, 0);
+  assert.match(result.reason ?? '', /cerebras.*HTTP 503; groq.*HTTP 503/);
 });
 
 test('a composed sample amount is normalized for a numeric form field', async () => {

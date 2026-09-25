@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { ElementInfo, Observation, TaskInput, TextHelper } from '../core/types.js';
+import { TextHelperUnavailableError, type ElementInfo, type Observation, type TaskInput, type TextHelper } from '../core/types.js';
 
 const composeResult = z.object({ status: z.enum(['text', 'need_input']), text: z.string().max(10000) });
 const repairResult = z.object({ guidance: z.string().max(500) });
@@ -10,17 +10,23 @@ export class FastTextHelper implements TextHelper {
   private async ask<T>(shape: Shape, schema: object, state: object, signal: AbortSignal): Promise<T> {
     signal.throwIfAborted();
     const endpoint = this.provider === 'cerebras' ? 'https://api.cerebras.ai/v1/chat/completions' : 'https://api.groq.com/openai/v1/chat/completions';
-    const response = await this.request(endpoint, {
+    let response: Response;
+    try { response = await this.request(endpoint, {
       method: 'POST', redirect: 'error',
       headers: { Authorization: `Bearer ${this.key}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ model: this.model, stream: false, reasoning_effort: 'none', max_completion_tokens: shape === 'compose' ? 600 : 180,
         messages: [{ role: 'user', content: JSON.stringify(state) }],
         response_format: { type: 'json_schema', json_schema: { name: `flick_${shape}`, strict: true, schema } } }),
       signal: AbortSignal.any([signal, AbortSignal.timeout(12000)]),
-    });
-    if (!response.ok) throw new Error(`${this.provider} ${shape} request failed (HTTP ${response.status}).`);
-    const result = z.object({ choices: z.array(z.object({ message: z.object({ content: z.string() }) })).min(1) }).parse(await response.json());
-    return JSON.parse(result.choices[0].message.content) as T;
+    }); } catch {
+      signal.throwIfAborted();
+      throw new TextHelperUnavailableError(`${this.provider} ${shape} request timed out or could not connect`);
+    }
+    if (!response.ok) throw new TextHelperUnavailableError(`${this.provider} ${shape} returned HTTP ${response.status}`);
+    try {
+      const result = z.object({ choices: z.array(z.object({ message: z.object({ content: z.string() }) })).min(1) }).parse(await response.json());
+      return JSON.parse(result.choices[0].message.content) as T;
+    } catch { throw new TextHelperUnavailableError(`${this.provider} ${shape} returned an invalid response`); }
   }
   async compose(input: TaskInput, observation: Observation, field: ElementInfo, signal: AbortSignal) {
     const schema = { type: 'object', properties: { status: { type: 'string', enum: ['text', 'need_input'] }, text: { type: 'string' } },
@@ -76,4 +82,43 @@ export class CerebrasTextHelper extends FastTextHelper {
 }
 export class GroqTextHelper extends FastTextHelper {
   constructor(key: string, model = 'qwen/qwen3.8-27b', request: typeof fetch = fetch) { super(key, model, 'groq', request); }
+}
+
+export class FallbackTextHelper implements TextHelper {
+  private primaryRetryAt = 0;
+  constructor(private primary: TextHelper, private backup: TextHelper) {}
+  async compose(input: TaskInput, observation: Observation, field: ElementInfo, signal: AbortSignal) {
+    if (Date.now() < this.primaryRetryAt) return this.backup.compose(input, observation, field, signal);
+    try { return await this.primary.compose(input, observation, field, signal); }
+    catch (primaryError) {
+      signal.throwIfAborted();
+      this.primaryRetryAt = Date.now() + 30_000;
+      const primaryCalls = primaryError instanceof TextHelperUnavailableError ? primaryError.modelCalls : 1;
+      try {
+        const answer = await this.backup.compose(input, observation, field, signal);
+        return { ...answer, modelCalls: primaryCalls + (answer.modelCalls ?? 1) };
+      } catch (backupError) {
+        signal.throwIfAborted();
+        const backupCalls = backupError instanceof TextHelperUnavailableError ? backupError.modelCalls : 1;
+        const primaryReason = primaryError instanceof TextHelperUnavailableError ? primaryError.message : 'primary text helper failed';
+        const backupReason = backupError instanceof TextHelperUnavailableError ? backupError.message : 'backup text helper failed';
+        throw new TextHelperUnavailableError(`${primaryReason}; ${backupReason}`, primaryCalls + backupCalls);
+      }
+    }
+  }
+  async repair(input: TaskInput, observation: Observation, history: string[], signal: AbortSignal) {
+    if (Date.now() < this.primaryRetryAt) return this.backup.repair(input, observation, history, signal);
+    try { return await this.primary.repair(input, observation, history, signal); }
+    catch (primaryError) {
+      signal.throwIfAborted();
+      this.primaryRetryAt = Date.now() + 30_000;
+      try { return await this.backup.repair(input, observation, history, signal); }
+      catch (backupError) {
+        signal.throwIfAborted();
+        const primaryReason = primaryError instanceof TextHelperUnavailableError ? primaryError.message : 'primary text helper failed';
+        const backupReason = backupError instanceof TextHelperUnavailableError ? backupError.message : 'backup text helper failed';
+        throw new TextHelperUnavailableError(`${primaryReason}; ${backupReason}`, 2);
+      }
+    }
+  }
 }

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { CerebrasTextHelper, GroqTextHelper } from '../src/providers/text-helper.js';
+import { CerebrasTextHelper, FallbackTextHelper, GroqTextHelper } from '../src/providers/text-helper.js';
 import { taskSchema, type Observation } from '../src/core/types.js';
 
 test('Groq helper requests strict Qwen output and validates its typed answer', async () => {
@@ -64,4 +64,24 @@ test('a search-field need_input answer is retried with the current search step',
   assert.equal(result.text, 'evrylo.com');
   assert.equal(result.modelCalls, 2);
   assert.equal(calls, 2);
+});
+
+test('Cerebras 503 falls back to Groq and skips the unavailable primary on the next field', async () => {
+  let cerebrasCalls = 0, groqCalls = 0;
+  const failing: typeof fetch = async () => { cerebrasCalls++; return new Response('', { status: 503 }); };
+  const working: typeof fetch = async () => {
+    groqCalls++;
+    return new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ status: 'text', text: 'evrylo.com' }) } }] }), { status: 200 });
+  };
+  const helper = new FallbackTextHelper(new CerebrasTextHelper('private-primary-key', 'qwen-3.8-27b', failing),
+    new GroqTextHelper('private-backup-key', 'qwen/qwen3.8-27b', working));
+  const field: Observation['elements'][number] = { id: 'search', role: 'combobox', name: 'Search', disabled: false, actions: ['fill'] };
+  const observation: Observation = { id: 'o', revision: 'r', sessionId: 's', kind: 'browser', title: 'Google', text: 'Search',
+    elements: [field], truncated: false, capturedAt: Date.now() };
+  const input = taskSchema.parse({ sessionId: 's', goal: 'Search for evrylo.com', until: [{ kind: 'text', text: 'Found' }] });
+  const first = await helper.compose(input, observation, field, new AbortController().signal);
+  const second = await helper.compose(input, observation, field, new AbortController().signal);
+  assert.equal(first.text, 'evrylo.com'); assert.equal(first.modelCalls, 2);
+  assert.equal(second.text, 'evrylo.com'); assert.equal(second.modelCalls, 1);
+  assert.equal(cerebrasCalls, 1); assert.equal(groqCalls, 2);
 });

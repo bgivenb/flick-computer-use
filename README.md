@@ -57,7 +57,7 @@ Run `npm run playground` and open the printed `127.0.0.1` URL. The **Talk to Jev
 
 The separate **Computer task** view sends one complete goal to Flick and displays Jev's action log. It requires an observable phrase to verify completion. The playground binds only to localhost and reads the same local TypeSafe key as the MCP server.
 
-Optionally set `CEREBRAS_API_KEY` in `.env.local` to let Jev request text for an observed field and get a recovery hint after repeated action errors. The default helper model is `qwen-3.8-27b`. `GROQ_API_KEY` remains an alternative; Cerebras takes precedence when both are set. Jev still chooses the field and the next computer action; the text helper is not called for ordinary clicks. Exact supplied values remain available without either provider.
+Optionally set `CEREBRAS_API_KEY` in `.env.local` to let Jev request text for an observed field and get a recovery hint after repeated action errors. The default helper model is `qwen-3.8-27b`. `GROQ_API_KEY` is an alternative and an automatic fallback when both are configured and Cerebras fails. Jev still chooses the field and the next computer action; the text helper is not called for ordinary clicks. Exact supplied values remain available without either provider.
 
 ## Architecture
 
