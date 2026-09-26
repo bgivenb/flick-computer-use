@@ -96,6 +96,8 @@ export class TaskRunner {
     // Progress is judged on task state, not on every pixel or focus change. Repeated actions are
     // withdrawn before the next Jev choice so a loop can recover through another available route.
     const attempts = new Map<string, number>(), futile = new Map<string, number>();
+    const recentSwitches: string[] = [];
+    let switchLock = false;
     const failed = new Map<string, { count: number; step: number }>();
     let idle = 0, staleStreak = 0;
     let repairCount = 0, lastLoopRepairDigest: string | undefined;
@@ -118,6 +120,16 @@ export class TaskRunner {
           const effect = describeEffect(previous.before, observation, previous.action);
           previous.event.effect = effect;
           history.push(`${previous.description} → ${effect}${observation.title !== previous.before.title ? `; now ${observation.title}` : ''}`);
+          if (previous.action.kind === 'switch') {
+            recentSwitches.push(previous.action.targetId);
+            if (recentSwitches.length > 3) recentSwitches.shift();
+            if (recentSwitches.length === 3 && recentSwitches[0] === recentSwitches[2] && recentSwitches[0] !== recentSwitches[1])
+              switchLock = true;
+          } else if (!['wait', 'wait_for_load', 'wait_for_change', 'wait_for_images', 'scan_screen'].includes(previous.action.kind)
+            && effect !== 'no visible effect') {
+            recentSwitches.length = 0;
+            switchLock = false;
+          }
           // Opening controls is progress even if the compact task digest did not change.
           const unchanged = digest === previous.digest && !/\b[1-9]\d* controls appeared\b/.test(effect);
           if (unchanged) futile.set(`${previous.digest}|${previous.key}`, (futile.get(`${previous.digest}|${previous.key}`) ?? 0) + 1);
@@ -134,6 +146,13 @@ export class TaskRunner {
         const view = canCopyText ? withCopyableText(focused) : focused;
         const surface = JSON.stringify(view.elements.map(e => [e.id, e.actions]));
         const candidates = candidatesFor(view, inputs, { factored: this.decider.factored, canCompose: Boolean(this.textHelper), canCopyText });
+        if (switchLock) {
+          for (const [key, candidate] of Object.entries(candidates))
+            if (typeof candidate.action !== 'string' && candidate.action.kind === 'switch') delete candidates[key];
+          const appName = observation.targets?.find(target => target.id === observation.targetId)?.name ?? observation.title;
+          const note = `Switching between apps has not advanced the goal. Work in ${JSON.stringify(appName)} using its visible controls or text helper before switching apps again.`;
+          if (history.at(-1) !== note) history.push(note);
+        }
         const withdrawn: string[] = [], unavailable: string[] = [];
         for (const [key, candidate] of Object.entries(candidates)) {
           if (typeof candidate.action === 'string') continue;

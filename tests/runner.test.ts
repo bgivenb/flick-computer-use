@@ -25,6 +25,38 @@ function environment(decider: Decider, options: { stale?: boolean; alreadyDone?:
 // A withdrawn click leaves nothing to click; a real decider would choose another option, this one gives up.
 const click: Decider = { decide: async (_, __, candidates) => ({ choice: Object.keys(candidates).find(k => candidates[k].description.startsWith('Click')) ?? 'blocked', confidence: .99, probability: .99, latencyMs: 1 }) };
 
+test('alternating app switches give way to work in the current app', async () => {
+  let active: string | undefined;
+  let note = '';
+  const switches: string[] = [];
+  const histories: string[][] = [];
+  const driver: Driver = { id: 's', kind: 'desktop', label: 'Mac',
+    observe: async () => ({ id: `o${switches.length}:${note}`, revision: `${active}:${note}`, sessionId: 's', kind: 'desktop',
+      title: active === 'notes' ? 'Notes' : active === 'messages' ? 'Messages' : 'Choose an app', targetId: active,
+      targets: [{ id: 'notes', name: 'Notes', kind: 'macos' }, { id: 'messages', name: 'Messages', kind: 'macos' }],
+      text: active === 'notes' ? note : '',
+      elements: active === 'notes' ? [{ id: 'note', role: 'textbox', name: 'Note body', value: note, disabled: false, actions: ['fill'] }] : [],
+      truncated: false, capturedAt: Date.now() }),
+    act: async action => {
+      if (action.kind === 'switch') { active = action.targetId; switches.push(active); }
+      if (action.kind === 'fill') note = action.value;
+    }, screenshot: async () => Buffer.alloc(0), close: async () => {} };
+  const decider: Decider = { decide: async (_input, _observation, candidates, history) => {
+    histories.push([...history]);
+    return { choice: Object.keys(candidates).find(key => key.startsWith('switch:')) ?? 'compose:note',
+      confidence: .99, probability: .99, latencyMs: 1 };
+  } };
+  const helper: TextHelper = { compose: async () => ({ status: 'text', text: 'Frogs sing at dusk.' }), repair: async () => '' };
+  const runner = new TaskRunner(decider, helper);
+  const input = taskSchema.parse({ sessionId: 's', goal: 'Write a poem in Notes, then open Messages',
+    until: [{ kind: 'field', name: 'Note body', value: 'Frogs sing at dusk.' }] });
+  const result = await runner.wait(runner.start(driver, input).id, 1000);
+  assert.equal(result.status, 'succeeded', result.reason);
+  assert.deepEqual(switches, ['notes', 'messages', 'notes']);
+  assert.equal(note, 'Frogs sing at dusk.');
+  assert.ok(histories.some(history => history.some(line => line.includes('Switching between apps has not advanced the goal'))));
+});
+
 test('Jev can choose Groq drafting for an observed field without pre-supplied text', async () => {
   let value = '', compositions = 0;
   const driver: Driver = { id: 's', kind: 'browser', label: 'fixture',

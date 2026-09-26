@@ -77,6 +77,7 @@ For text-transfer goals on macOS, Jev can choose `copy_text` and then an observe
 For a copy-only goal, use `until: [{ "kind": "clipboard_text" }]`, optionally with `contains` to verify a known phrase. This condition records text copied by the current task, rather than treating an old clipboard value as success.
 
 `computer_workflow` is a separate convenience for a caller-specified sequence of native stages. Mixed browser/native stage plans have not been added to that tool.
+If Jev alternates between two apps without acting in either one, Flick temporarily removes app switching from the next choices and asks Jev to work with the current app's controls or text helper. A real action with a visible effect re-enables switching.
 
 ## Tools
 
