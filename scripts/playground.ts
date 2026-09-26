@@ -114,15 +114,19 @@ async function route(req: IncomingMessage, res: ServerResponse) {
       const goal = String(data.goal ?? '').trim(), doneText = String(data.doneText ?? '').trim();
       if (!goal || !doneText) throw new Error('Enter a goal and exact text to look for when done.');
       if (task) await (await client()).call('computer_close', { sessionId: task.sessionId });
+      if (!['mac-any', 'mac-specific', 'browser'].includes(data.target)) throw new Error('Choose a valid target mode.');
       const target = data.target === 'browser'
         ? { kind: 'browser', name: 'Existing Chrome', connection: 'existing-chrome', url: String(data.url ?? '').trim() }
-        : { kind: 'macos', name: 'Mac app', bundleId: String(data.bundleId || 'com.google.Chrome').trim() };
-      if (target.kind === 'browser' && !/^https?:\/\//.test(target.url)) throw new Error('Fast browser mode needs a starting http(s) URL.');
+        : data.target === 'mac-specific'
+          ? { kind: 'macos', name: 'Mac app', bundleId: String(data.bundleId ?? '').trim() }
+          : undefined;
+      if (target?.kind === 'browser' && !/^https?:\/\//.test(target.url)) throw new Error('Fast browser mode needs a starting http(s) URL.');
+      if (target?.kind === 'macos' && !target.bundleId) throw new Error('Enter a Mac app bundle ID.');
       const until = /^https?:\/\//i.test(doneText)
         ? [{ kind: 'url' as const, contains: doneText }]
         : [{ kind: 'text' as const, text: doneText }];
       const started = await (await client()).call('computer_execute', { goal, inputs: inputs(data.values),
-        targets: [target], until, maxSteps: 120, timeoutMs: 180_000,
+        ...(target ? { targets: [target] } : {}), until, maxSteps: 120, timeoutMs: 180_000,
         minConfidence: minimumConfidence(data.minConfidence) });
       task = { id: started.id, sessionId: started.sessionId, status: started.status };
       json(res, 200, started); return;

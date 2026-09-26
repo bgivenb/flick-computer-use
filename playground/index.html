@@ -79,10 +79,10 @@
   <section id="task-panel" hidden>
     <h2>Give Flick a computer goal</h2>
     <p>One goal starts one autonomous Flick task. Jev chooses the actions; this page shows the live action log. No task runs until you press Run.</p>
-    <div id="task-feed" class="feed" aria-live="polite"><div class="bubble system">Choose a target, describe the goal, and give a short exact phrase the interface should show when it is done.</div></div>
+    <div id="task-feed" class="feed" aria-live="polite"><div class="bubble system">Choose which apps Flick can use, describe the goal, and give a short exact phrase the interface should show when it is done.</div></div>
     <form id="task-form" class="card">
-      <div class="row"><div><label for="target">Target</label><select id="target"><option value="mac">Visible Mac app</option><option value="browser">Existing Chrome (fast)</option></select></div>
-        <div id="bundle-wrap"><label for="bundle">Mac app bundle ID</label><input id="bundle" value="com.google.Chrome"></div>
+      <div class="row"><div><label for="target">Apps Flick can use</label><select id="target"><option value="mac-any">Any Mac app</option><option value="mac-specific">One Mac app</option><option value="browser">Existing Chrome (fast)</option></select></div>
+        <div id="bundle-wrap" hidden><label for="bundle">Mac app bundle ID</label><input id="bundle" placeholder="com.apple.TextEdit"></div>
         <div id="url-wrap" hidden><label for="url">Starting URL</label><input id="url" type="url" placeholder="https://example.com/"></div></div>
       <label for="goal">What should Jev do?</label><textarea id="goal" placeholder="Describe the overall result, not a click-by-click plan." required></textarea>
       <label for="done">Done when visible text or page URL contains</label><input id="done" placeholder="A visible phrase, or the destination URL" required>
@@ -145,7 +145,7 @@
     finally { $('ask').disabled = false; }
   });
 
-  $('target').onchange = () => { const browser = $('target').value === 'browser'; $('url-wrap').hidden = !browser; $('bundle-wrap').hidden = browser; };
+  $('target').onchange = () => { $('url-wrap').hidden = $('target').value !== 'browser'; $('bundle-wrap').hidden = $('target').value !== 'mac-specific'; };
   let currentTask, seen = 0, ended = false, polling = false;
   async function poll() {
     if (!currentTask || polling) return; polling = true;
