@@ -42,7 +42,7 @@ function inputs(value: unknown): Input {
   return parsed as Input;
 }
 function minimumConfidence(value: unknown) {
-  const parsed = Number(value ?? 0);
+  const parsed = Number(value ?? 0.10);
   if (!Number.isFinite(parsed) || parsed < 0 || parsed > 1) throw new Error('Minimum confidence must be between 0 and 1.');
   return parsed;
 }
@@ -112,7 +112,7 @@ async function route(req: IncomingMessage, res: ServerResponse) {
     if (req.url === '/api/task/start') {
       if (task?.status === 'running') throw new Error('A computer task is already running.');
       const goal = String(data.goal ?? '').trim(), doneText = String(data.doneText ?? '').trim();
-      if (!goal || !doneText) throw new Error('Enter a goal and exact text to look for when done.');
+      if (!goal) throw new Error('Enter the goal you want Flick to complete.');
       if (task) await (await client()).call('computer_close', { sessionId: task.sessionId });
       if (!['mac-any', 'mac-specific', 'browser'].includes(data.target)) throw new Error('Choose a valid target mode.');
       const target = data.target === 'browser'
@@ -122,11 +122,11 @@ async function route(req: IncomingMessage, res: ServerResponse) {
           : undefined;
       if (target?.kind === 'browser' && !/^https?:\/\//.test(target.url)) throw new Error('Fast browser mode needs a starting http(s) URL.');
       if (target?.kind === 'macos' && !target.bundleId) throw new Error('Enter a Mac app bundle ID.');
-      const until = /^https?:\/\//i.test(doneText)
+      const until = !doneText ? [] : /^https?:\/\//i.test(doneText)
         ? [{ kind: 'url' as const, contains: doneText }]
         : [{ kind: 'text' as const, text: doneText }];
       const started = await (await client()).call('computer_execute', { goal, inputs: inputs(data.values),
-        ...(target ? { targets: [target] } : {}), until, maxSteps: 120, timeoutMs: 180_000,
+        ...(target ? { targets: [target] } : {}), until, planning: 'auto', maxSteps: 120, timeoutMs: 180_000,
         minConfidence: minimumConfidence(data.minConfidence) });
       task = { id: started.id, sessionId: started.sessionId, status: started.status };
       json(res, 200, started); return;

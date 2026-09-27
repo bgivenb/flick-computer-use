@@ -83,3 +83,13 @@ For native apps and browser OCR fallback on macOS, build the helpers with `npm r
 ## Optional benchmarks
 
 `npm run demo:bench` runs a richer bundled productivity fixture. `npm run demo:record` records it. These are development and demonstration tools, not part of the install or the user's normal workflow.
+
+## After each run
+
+The calling agent should perform the `postMortem` review returned with every terminal task or workflow result, including successful runs. Check the actual outcome and any retries, ineffective actions, handoffs, or user corrections. A clean run needs no extra tool call: proceed. If something went wrong, optionally read and update a matching local guide with a concise reusable lesson. Temporary `computer_continue` guidance is not saved learning. Keep untested lessons `suggested`; promote only with observed successful recovery evidence. Do not resume a user-interrupted task just to test guidance.
+
+## Carrying information between apps
+
+For work that carries information between pages or apps, describe what Jev must retain before leaving the source. Put capturing the needed facts in the source milestone, name its produces text artifact, and reference that name in later uses. For example: read pricing and retain plan names, prices, billing intervals and source URL as pricing_notes; then use pricing_notes to write the note or email. Jev chooses whether to copy exact source text to the clipboard or request candidate notes from the writing helper and select one to save. Do not assume visiting a page or marking a milestone complete makes its text available to later writing. Keep the full goal in one call and let Jev choose the actions.
+
+A short plan can be: **read and retain pricing → write a note from the retained pricing → copy the finished note into an email draft**. Keep the requested endpoint explicit (for example, leave the email unsent). Task notes live in the current run and its continuations; they are not permanent app guidance.

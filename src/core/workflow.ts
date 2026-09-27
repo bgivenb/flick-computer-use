@@ -1,3 +1,5 @@
+import { postMortem, type PostMortem } from './post-mortem.js';
+import { UserActivityError, UserActivityMonitorError, type ActivityWatch } from './user-activity.js';
 import { randomUUID } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
 import { z } from 'zod';
@@ -17,7 +19,7 @@ export const workflowSchema = z.object({
   })).min(1).max(10),
   ocr: z.enum(['auto', 'always', 'off']).default('auto'),
   timeoutMs: z.number().int().min(1000).max(300000).default(60000),
-  minConfidence: z.number().min(0).max(1).default(0.55),
+  minConfidence: z.number().min(0).max(1).default(0.10),
 }).superRefine((value, context) => {
   value.stages.forEach((stage, index) => {
     if (new Set([...Object.keys(stage.inputs), ...Object.keys(stage.inputsFrom)]).size > 20)
@@ -28,10 +30,10 @@ export const workflowSchema = z.object({
   });
 });
 export type WorkflowInput = z.infer<typeof workflowSchema>;
-export interface WorkflowDriver extends Driver { switchApp(bundleId: string): Promise<void> }
+export interface WorkflowDriver extends Driver { switchApp(bundleId: string, signal?:AbortSignal): Promise<void> }
 export interface Workflow {
   id: string; kind: 'workflow'; status: Status; startedAt: number; finishedAt?: number;
-  stage: number; stageCount: number; reason?: string;
+  stage: number; stageCount: number; reason?: string; postMortem?: PostMortem;
   stages: Array<{ bundleId: string; result: Task }>;
   metrics: { elapsedMs: number; modelCalls: number; steps: number };
 }
@@ -42,7 +44,8 @@ export class WorkflowRunner {
   private completions = new Map<string, Promise<void>>();
   private active?: { id: string; controller: AbortController; taskId?: string };
   constructor(private tasks: TaskRunner,
-    private open: (bundleId: string, ocr: WorkflowInput['ocr']) => Promise<WorkflowDriver>) {}
+    private open: (bundleId: string, ocr: WorkflowInput['ocr'], signal?:AbortSignal) => Promise<WorkflowDriver>,
+    private userActivity?: ActivityWatch) {}
   busy() { return Boolean(this.active); }
   has(id: string) { return this.records.has(id); }
   start(input: WorkflowInput) {
@@ -71,6 +74,7 @@ export class WorkflowRunner {
       modelCalls: value.stages.reduce((sum, s) => sum + s.result.metrics.modelCalls, 0),
       steps: value.stages.reduce((sum, s) => sum + s.result.steps, 0) };
     if (!includeObservation) for (const stage of value.stages) delete stage.result.lastObservation;
+    if(value.status !== 'running') value.postMortem=postMortem(value.status,value.stages.map(stage=>stage.result));
     return value;
   }
   async wait(id: string, waitMs: number, includeObservation = false) {
@@ -97,15 +101,18 @@ export class WorkflowRunner {
   private async run(workflow: Workflow, input: WorkflowInput, active: NonNullable<WorkflowRunner['active']>) {
     let driver: WorkflowDriver | undefined;
     let timedOut = false;
+    let stopActivity: (()=>void) | undefined;
     const deadline = setTimeout(() => { timedOut = true; this.cancel(workflow.id); }, input.timeoutMs);
     const signal = active.controller.signal;
     const observations: Observation[] = [];
     try {
-      driver = await this.open(input.stages[0].bundleId, input.ocr);
+      stopActivity = await this.userActivity?.({kind:'macos',userActivityScope:'desktop'},signal,reason=>active.controller.abort(reason));
+      signal.throwIfAborted();
+      driver = await this.open(input.stages[0].bundleId, input.ocr,signal);
       for (const [index, stage] of input.stages.entries()) {
         signal.throwIfAborted();
         workflow.stage = index;
-        if (index > 0 && stage.bundleId !== input.stages[index - 1].bundleId) await driver.switchApp(stage.bundleId);
+        if (index > 0 && stage.bundleId !== input.stages[index - 1].bundleId) await driver.switchApp(stage.bundleId,signal);
         signal.throwIfAborted();
         const inputs = { ...stage.inputs };
         for (const [name, source] of Object.entries(stage.inputsFrom)) {
@@ -116,7 +123,7 @@ export class WorkflowRunner {
         }
         const task = this.tasks.start(driver, { sessionId: driver.id, goal: stage.goal, inputs, until: stage.until,
           maxSteps: stage.maxSteps, minConfidence: input.minConfidence,
-          timeoutMs: Math.max(1, input.timeoutMs - (Date.now() - workflow.startedAt)) });
+          timeoutMs: Math.max(1, input.timeoutMs - (Date.now() - workflow.startedAt)) },undefined,signal);
         active.taskId = task.id;
         workflow.stages.push({ bundleId: stage.bundleId, result: task });
         let result: Task;
@@ -130,9 +137,12 @@ export class WorkflowRunner {
       workflow.status = 'succeeded';
       workflow.reason = 'Every stage completed its observable conditions.';
     } catch (error) {
-      workflow.status = signal.aborted ? (timedOut ? 'timed_out' : 'cancelled') : 'failed';
-      workflow.reason = signal.aborted ? (timedOut ? 'Workflow deadline exceeded.' : 'Workflow cancelled.') : error instanceof Error ? error.message : 'Workflow failed.';
+      const cause=signal.aborted ? signal.reason : error;
+      workflow.status=cause instanceof UserActivityError ? 'interrupted' : cause instanceof UserActivityMonitorError ? 'blocked' : signal.aborted ? (timedOut ? 'timed_out' : 'cancelled') : 'failed';
+      workflow.reason=cause instanceof UserActivityError || cause instanceof UserActivityMonitorError ? cause.message : signal.aborted ? (timedOut ? 'Workflow deadline exceeded.' : 'Workflow cancelled.') : error instanceof Error ? error.message : 'Workflow failed.';
+      if(cause instanceof UserActivityError) workflow.reason='Interrupted because you used the mouse or keyboard. Inspect the saved stage results, then start a new workflow for the unfinished stages when ready.';
     } finally {
+      stopActivity?.();
       clearTimeout(deadline);
       try { await driver?.close(); }
       finally { workflow.finishedAt = Date.now(); this.active = undefined; }

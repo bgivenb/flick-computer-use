@@ -15,15 +15,28 @@ test('real stdio MCP: discovery, schemas, session, action, missing-key error, an
     assert.ok(tools.some(t => t.name === 'computer_workflow'));
     assert.ok(tools.some(t => t.name === 'computer_execute'));
     assert.ok(tools.some(t => t.name === 'computer_continue'));
+    assert.ok(tools.some(t => t.name === 'computer_guide_read'));
+    assert.ok(tools.some(t => t.name === 'computer_guide_update'));
+    const execute = tools.find(t => t.name === 'computer_execute')!;
+    assert.ok(execute.inputSchema.properties?.plan); assert.ok(execute.inputSchema.properties?.planning);
     assert.equal((await call('computer_health')).apiKeyConfigured, false);
+    const notesGuides = await call('computer_guide_read', { targetId: 'com.apple.Notes' });
+    assert.ok(notesGuides.guides.length > 0);
+    const guide = { schemaVersion: 1, id: 'fixture-guide', name: 'Fixture guide', version: 1, match: { hosts: ['fixture.example'] },
+      instructions: [{ id: 'suggestion', text: 'Inspect the visible editor.', status: 'suggested', provenance: { source: 'agent' } }] };
+    assert.equal((await call('computer_guide_update', { guide, expectedVersion: 0 })).savedLocally, true);
+    assert.equal((await call('computer_guide_read', { id: 'fixture-guide' })).guide.version, 1);
+    assert.deepEqual((await call('computer_guide_read', { url: 'https://fixture.example/' })).guides, []);
     const session = await call('computer_open', { url: web.url, headless: true });
     assert.ok(session.sessionId);
     const button = session.observation.elements.find((e: any) => e.name === 'Export settings');
     const result = await call('computer_act', { sessionId: session.sessionId, observationId: session.observation.id, action: { kind: 'click', elementId: button.id } });
     assert.ok(result.elements.some((e: any) => e.name === 'Contact email'));
+    await assert.rejects(call('computer_act', { sessionId: session.sessionId, observationId: result.id, action: { kind: 'request_vision' } }), /active Jev task/);
     await assert.rejects(call('computer_run', { sessionId: session.sessionId, goal: 'Save', until: [{ kind: 'text', text: 'Saved' }] }), /TYPESAFE_API_KEY/);
-    const bad = await client.callTool({ name: 'computer_run', arguments: { sessionId: session.sessionId, goal: 'Save', until: [] } });
+    const bad = await client.callTool({ name: 'computer_run', arguments: { sessionId: session.sessionId, goal: 'Save', planning: 'off', until: [] } });
     assert.equal(bad.isError, true);
+    assert.match(JSON.stringify(bad.content), /explicit completion condition/);
     await call('computer_close', { sessionId: session.sessionId });
     assert.deepEqual((await call('computer_sessions')).sessions, []);
   } finally { await client.close(); await web.close(); await rm(dir, { recursive: true, force: true }); }

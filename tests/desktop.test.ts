@@ -85,3 +85,16 @@ test('cancellation during app opening schedules no following write', async () =>
     assert.equal(result.status, 'cancelled'); assert.equal(l.saved(), '');
   } finally { await l.driver.close(); }
 });
+
+test('remember accepts a selected synthetic page excerpt and rechecks it against fresh text', async () => {
+  const {withCopyableText} = await import('../src/core/copy-text.js');
+  const l=lab(), signal=new AbortController().signal;
+  try {
+    await l.driver.act({kind:'switch',targetId:'source'},await l.driver.observe(),signal);
+    const view=withCopyableText(await l.driver.observe());
+    await l.driver.act({kind:'remember',elementId:'read:page-text'},view,signal);
+    assert.equal((await l.driver.observe()).memory?.[0].value,'Ready');
+    const forged={...view,elements:view.elements.map(e=>e.id==='read:page-text'?{...e,value:'invented'}:e)};
+    await assert.rejects(l.driver.act({kind:'remember',elementId:'read:page-text'},forged,signal),StaleObservationError);
+  } finally {await l.driver.close();}
+});

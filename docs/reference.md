@@ -48,7 +48,9 @@ Existing-Chrome tasks reuse one Chrome-approved debugging connection across task
 
 Pass this to `computer_run`. It returns a task ID. `computer_status` can wait up to 20 seconds for completion; callers can also request immediate snapshots. Defaults: 25 actions, 60 seconds, 0.55 Choice confidence. These are prototype defaults, not reliability guarantees.
 
-Statuses are `running`, `succeeded`, `blocked`, `failed`, `cancelled`, and `timed_out`. Every requested condition must pass. Failed or incomplete tasks can receive exact missing values and guidance through `computer_continue`; the existing session remains available.
+Statuses are `running`, `succeeded`, `blocked`, `failed`, `cancelled`, `timed_out`, and `interrupted`. Every requested condition must pass. Failed or incomplete tasks can receive exact missing values and guidance through `computer_continue`; the existing session remains available.
+
+On macOS, physical mouse movement, clicking, scrolling, or typing interrupts tasks using the desktop or visible Chrome. Flick's synthetic input is ignored. Input Monitoring permission and the native helper are required; a monitor failure stops execution. Headless browser tasks are unaffected. `interrupted` tasks retain their plan, saved text, and pending action receipts. Resume explicitly with `computer_continue` after the user is ready; the interface is observed again before acting. An already-dispatched atomic input operation may finish. Legacy `computer_workflow` closes its session when interrupted; inspect its stage results and start a new workflow for the unfinished stages.
 
 Use `computer_cancel` and wait for a terminal status before closing a busy session. An already-started input operation may finish. MCP shutdown cancels tasks and closes owned resources.
 
@@ -129,3 +131,13 @@ The bundled demo persists reports only for its synthetic data. The server otherw
 | `demo/` | Independent synthetic productivity app |
 | `scripts/` | Setup, demonstrations, recordings, live checks |
 | `tests/` | Deterministic tests and disposable fixtures |
+
+### Post-run review
+
+Every terminal task/workflow snapshot includes `postMortem`: a review instruction for the calling agent, diagnostic signals with task/step references, and loaded guide IDs. It is not an automatic diagnosis and makes no extra model calls. Review successes too. If the run was clean, proceed without writing guidance. If issues occurred, optionally save a reusable lesson through `computer_guide_read` and `computer_guide_update`; untested lessons remain suggested. The MCP supplies this reminder but cannot force an external agent to follow it. Repeated status polls return the same reminder and do not create duplicate guides.
+
+### Verification recovery
+
+Milestone evidence includes actual control capabilities, enabled state, and observed focus. Verification judges the current milestone: app identity and a usable editor can establish an opening/setup requirement, but do not establish sending or receiving a reply. When a judgment uses several observed records, their exact bounded contents stay with the completed milestone for the final goal check; the short display excerpt is not the sole retained proof.
+
+After two failed checks of the same criterion against unchanged evidence, both completion choices are withheld. Jev can gather missing evidence, wait for a response, do remaining work, or request a plan revision. New observed facts, required retained text, or a corrected criterion restore those choices. Regenerated snapshot IDs and an identical replan do not reset the limit. The writing helper receives matching app guides for both planning and revisions, and simple tasks should use the smallest useful outcome checklist.

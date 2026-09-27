@@ -1,0 +1,76 @@
+{
+  "schemaVersion": 1,
+  "id": "google-search",
+  "name": "Google Search",
+  "version": 1,
+  "match": {
+    "hosts": [
+      "google.com",
+      "www.google.com",
+      "google.co.uk",
+      "www.google.co.uk",
+      "google.ca",
+      "www.google.ca"
+    ]
+  },
+  "instructions": [
+    {
+      "id": "query-terms",
+      "text": "Use a concise query containing the task’s distinctive terms or domain. Add descriptive words when results are too broad; spelling and capitalization usually do not need exact matching.",
+      "status": "documented",
+      "provenance": {
+        "source": "builtin",
+        "reference": "https://support.google.com/websearch/answer/134479?hl=en"
+      }
+    },
+    {
+      "id": "restrict-site",
+      "text": "When the task requires a particular website’s content, the site:domain operator can narrow the query. Read the result’s displayed domain before opening it.",
+      "status": "documented",
+      "provenance": {
+        "source": "builtin",
+        "reference": "https://support.google.com/websearch/answer/134479?hl=en"
+      }
+    },
+    {
+      "id": "search-field",
+      "text": "Fill the observed Search control with the query, then choose the offered search submission action. A visible suggestion list is not the same as a loaded results page.",
+      "status": "documented",
+      "provenance": {
+        "source": "builtin",
+        "evidence": "Project workflow guidance, not validated live in this app. Suggested workflow for searchbox and combobox observations; grounded in current control state.",
+        "reference": "https://github.com/bgivenb/flick-computer-use/blob/main/src/core/runner.ts"
+      }
+    },
+    {
+      "id": "choose-result",
+      "text": "Use the result’s title, domain, and snippet together. For an official-site task, verify the resulting page URL and identity after opening it instead of assuming the first result is correct.",
+      "status": "documented",
+      "provenance": {
+        "source": "builtin",
+        "evidence": "Project workflow guidance, not validated live in this app. Proposed source-identity check; ranking does not establish official ownership.",
+        "reference": "https://github.com/bgivenb/flick-computer-use/blob/main/src/core/runner.ts"
+      }
+    },
+    {
+      "id": "wait-results",
+      "text": "If results or previews are still loading, wait for the relevant content before making another selection. When a result opens another tab, inspect the observed tabs and continue in the new destination.",
+      "status": "documented",
+      "provenance": {
+        "source": "builtin",
+        "evidence": "Project workflow guidance, not validated live in this app. Flick exposes wait and switch_tab choices; suggested recovery for asynchronous navigation.",
+        "reference": "https://github.com/bgivenb/flick-computer-use/blob/main/src/core/runner.ts"
+      }
+    },
+    {
+      "id": "track-goal",
+      "text": "Once the requested destination is verified, continue the website task there. Repeating the same search or returning to Google without new evidence does not advance that task.",
+      "status": "documented",
+      "provenance": {
+        "source": "builtin",
+        "evidence": "Project workflow guidance, not validated live in this app. Proposed milestone check to avoid navigation loops.",
+        "reference": "https://github.com/bgivenb/flick-computer-use/blob/main/src/core/runner.ts"
+      }
+    }
+  ]
+}

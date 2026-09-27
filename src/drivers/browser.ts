@@ -9,7 +9,7 @@ import { RecoverableActionError, StaleObservationError, type Action, type Driver
 import { snapshotScript } from './browser-snapshot.js';
 import { recognizeImage } from './image-ocr.js';
 
-export interface BrowserOptions { url: string; headless?: boolean; profile?: string; allowedOrigins?: string[]; browser?: 'chromium' | 'chrome'; connection?: 'dedicated' | 'existing-chrome'; recordVideoDir?: string; ocrImagePath?: string }
+export interface BrowserOptions { url: string; headless?: boolean; profile?: string; allowedOrigins?: string[]; browser?: 'chromium' | 'chrome'; connection?: 'dedicated' | 'existing-chrome'; recordVideoDir?: string; ocrImagePath?: string; signal?: AbortSignal }
 type Reference = { frame: Frame; localId: string; epoch: string; imageUrl?: string };
 function navigationOrigins(start: URL, allowedOrigins?: string[]) {
   if (!allowedOrigins?.length) return undefined;
@@ -25,6 +25,7 @@ export class BrowserDriver implements Driver {
   readonly id = randomUUID();
   readonly kind = 'browser' as const;
   readonly label: string;
+  get userActivityScope(): 'desktop' | 'headless' { return this.connectedBrowser || !this.headless ? 'desktop' : 'headless'; }
   private references = new Map<string, Map<string, Reference>>();
   private ownedPages = new Set<Page>();
   private tabIds = new WeakMap<Page, string>();
@@ -38,7 +39,7 @@ export class BrowserDriver implements Driver {
     try { return this.origins.has(new URL(page.url()).origin); } catch { return false; }
   }
   private constructor(private context: BrowserContext, private page: Page, private origins: Set<string> | undefined, browser: string,
-    private connectedBrowser?: Browser, private ocrImagePath?: string) {
+    private connectedBrowser?: Browser, private ocrImagePath?: string, private readonly headless = false) {
     this.label = connectedBrowser ? 'Google Chrome (existing profile, task tab)' : `${browser === 'chrome' ? 'Google Chrome' : 'Chromium'} (dedicated automation profile)`;
     const adopt = (page: Page) => {
       this.ownedPages.add(page); this.page = page;
@@ -52,6 +53,8 @@ export class BrowserDriver implements Driver {
     if (!connectedBrowser) context.on('page', adopt);
   }
   static async open(options: BrowserOptions, dataDir: string) {
+    const signal = options.signal;
+    signal?.throwIfAborted();
     const url = new URL(options.url);
     if (!['http:', 'https:'].includes(url.protocol)) throw new Error('Browser URL must use HTTP or HTTPS.');
     if (options.connection === 'existing-chrome') return this.connectExisting(options);
@@ -59,15 +62,20 @@ export class BrowserDriver implements Driver {
     if (!/^[a-zA-Z0-9_-]{1,60}$/.test(profile)) throw new Error('Profile must contain 1–60 letters, numbers, underscores, or hyphens.');
     const profilePath = resolve(dataDir, 'browser-profiles', profile);
     await mkdir(profilePath, { recursive: true, mode: 0o700 });
+    signal?.throwIfAborted();
     const origins = navigationOrigins(url, options.allowedOrigins);
-    const context = await chromium.launchPersistentContext(profilePath, {
-      channel: options.browser === 'chrome' ? 'chrome' : undefined,
-      chromiumSandbox: true,
-      headless: options.headless ?? false, viewport: { width: 1280, height: 900 },
-      acceptDownloads: false, serviceWorkers: 'block',
-      ...(options.recordVideoDir ? { recordVideo: { dir: options.recordVideoDir, size: { width: 1280, height: 900 } } } : {}),
-    });
+    let context: BrowserContext | undefined;
     try {
+      // Let dispatched Playwright operations settle before releasing ownership. Check
+      // cancellation between them rather than abandoning a launch that can still open UI.
+      context = await chromium.launchPersistentContext(profilePath, {
+        channel: options.browser === 'chrome' ? 'chrome' : undefined,
+        chromiumSandbox: true,
+        headless: options.headless ?? false, viewport: { width: 1280, height: 900 },
+        acceptDownloads: false, serviceWorkers: 'block',
+        ...(options.recordVideoDir ? { recordVideo: { dir: options.recordVideoDir, size: { width: 1280, height: 900 } } } : {}),
+      });
+      signal?.throwIfAborted();
       if (origins) {
         // Explicit origin lists restrict document navigation, not image/API/CDN subresources.
         await context.route('**/*', route => {
@@ -75,17 +83,22 @@ export class BrowserDriver implements Driver {
           if (request.isNavigationRequest() && !origins.has(new URL(request.url()).origin)) return route.abort('blockedbyclient');
           return route.continue();
         });
+        signal?.throwIfAborted();
       }
       const page = context.pages()[0] ?? await context.newPage();
+      signal?.throwIfAborted();
       await page.goto(url.href, { waitUntil: 'domcontentloaded', timeout: 20000 });
-      return new BrowserDriver(context, page, origins, options.browser ?? 'chromium', undefined, options.ocrImagePath);
-    } catch (error) { await context.close(); throw error; }
+      signal?.throwIfAborted();
+      return new BrowserDriver(context, page, origins, options.browser ?? 'chromium', undefined, options.ocrImagePath, options.headless ?? false);
+    } catch (error) { await context?.close().catch(() => {}); signal?.throwIfAborted(); throw error; }
   }
-  private static async approvedChrome(endpoint: string) {
+  private static async approvedChrome(endpoint: string, signal?: AbortSignal) {
+    signal?.throwIfAborted();
     const cached = this.existingChrome;
     if (cached?.endpoint === endpoint && cached.browser.isConnected()) return cached.browser;
     if (this.openingChrome) {
-      const opening = await this.openingChrome;
+      const opening = await this.openingChrome.catch(error => { signal?.throwIfAborted(); throw error; });
+      signal?.throwIfAborted();
       if (opening.endpoint === endpoint && opening.browser.isConnected()) return opening.browser;
     }
     const opening = (async () => {
@@ -103,7 +116,11 @@ export class BrowserDriver implements Driver {
       return connected;
     })();
     this.openingChrome = opening;
-    try { return (await opening).browser; }
+    try {
+      const connected = await opening;
+      signal?.throwIfAborted();
+      return connected.browser;
+    } catch (error) { signal?.throwIfAborted(); throw error; }
     finally { if (this.openingChrome === opening) this.openingChrome = undefined; }
   }
   static async disconnectExisting() {
@@ -112,25 +129,34 @@ export class BrowserDriver implements Driver {
     await browser?.close().catch(() => {});
   }
   private static async connectExisting(options: BrowserOptions) {
+    options.signal?.throwIfAborted();
     if (options.recordVideoDir) throw new Error('Built-in video recording requires a dedicated browser. Record your screen for an existing-Chrome session.');
     if (process.platform !== 'darwin') throw new Error('Existing Chrome discovery currently supports macOS.');
     const url = new URL(options.url);
     const origins = navigationOrigins(url, options.allowedOrigins);
     let address: string;
     try { address = await readFile(resolve(homedir(), 'Library/Application Support/Google/Chrome/DevToolsActivePort'), 'utf8'); }
-    catch { throw new Error('Enable remote debugging in your running Chrome at chrome://inspect/#remote-debugging, then connect again.'); }
+    catch { options.signal?.throwIfAborted(); throw new Error('Enable remote debugging in your running Chrome at chrome://inspect/#remote-debugging, then connect again.'); }
+    options.signal?.throwIfAborted();
     const [port, path] = address.trim().split(/\r?\n/);
     if (!/^\d+$/.test(port) || Number(port) < 1 || Number(port) > 65535 || !/^\/devtools\/browser\/[a-zA-Z0-9-]+$/.test(path))
       throw new Error('Chrome published an invalid local debugging endpoint.');
     // Chrome presents its own Allow dialog for a new connection. Reuse an approved
     // connection for later task tabs in this MCP process instead of asking every run.
-    const browser = await this.approvedChrome(`ws://127.0.0.1:${port}${path}`);
+    const browser = await this.approvedChrome(`ws://127.0.0.1:${port}${path}`, options.signal);
+    return this.openExistingTab(browser, options, origins);
+  }
+  private static async openExistingTab(browser: Browser, options: BrowserOptions, origins: Set<string> | undefined) {
+    const signal = options.signal;
     let page: Page | undefined;
+    let driver: BrowserDriver | undefined;
     try {
+      signal?.throwIfAborted();
       const context = browser.contexts()[0];
       if (!context) throw new Error('The connected Chrome did not expose a browser context.');
       page = await context.newPage();
-      const driver = new BrowserDriver(context, page, origins, 'chrome', browser, options.ocrImagePath);
+      signal?.throwIfAborted();
+      driver = new BrowserDriver(context, page, origins, 'chrome', browser, options.ocrImagePath);
       if (origins) {
         // Scope an explicit restriction to this task's tab, never the user's whole browser context.
         await page.route('**/*', route => {
@@ -138,11 +164,15 @@ export class BrowserDriver implements Driver {
           if (request.isNavigationRequest() && !origins.has(new URL(request.url()).origin)) return route.abort('blockedbyclient');
           return route.continue();
         });
+        signal?.throwIfAborted();
       }
-      await page.goto(url.href, { waitUntil: 'domcontentloaded', timeout: 20000 });
+      await page.goto(options.url, { waitUntil: 'domcontentloaded', timeout: 20000 });
+      signal?.throwIfAborted();
       return driver;
     } catch (error) {
-      await page?.close().catch(() => {});
+      if (driver) await driver.close().catch(() => {});
+      else await page?.close().catch(() => {});
+      signal?.throwIfAborted();
       throw error;
     }
   }
@@ -252,9 +282,11 @@ export class BrowserDriver implements Driver {
       JSON.stringify(observation.elements.map(e => [e.id, e.name, e.value, e.checked, e.selected, e.actions]));
     const until = Date.now() + 3000;
     let now = await this.observe();
+    signal.throwIfAborted();
     while (!changed(now) && Date.now() < until) {
       await delay(150, undefined, { signal });
       now = await this.observe();
+      signal.throwIfAborted();
     }
     return now;
   }
@@ -267,21 +299,24 @@ export class BrowserDriver implements Driver {
       signal.throwIfAborted();
       await target.bringToFront();
       this.page = target;
+      signal.throwIfAborted();
       return this.observe();
     }
     this.assertOpen();
     if (observation.sessionId !== this.id) throw new StaleObservationError();
     if (action.kind === 'wait') { await delay(200, undefined, { signal }); return; }
     if (action.kind === 'scan_screen') return this.observe({ ocr: 'always' }, signal);
-    if (action.kind === 'compose') throw new Error('Text composition runs in the task runner.');
+    if (action.kind === 'compose' || action.kind === 'draft') throw new Error('Text composition runs in the task runner.');
     if (action.kind === 'copy_text') throw new Error('Text copying runs in the task runner.');
     if (action.kind === 'wait_for_change') return this.waitForChange(observation, signal);
     if (action.kind === 'wait_for_images') {
       const until = Date.now() + 3000;
       let now = await this.observe();
+      signal.throwIfAborted();
       while ((now.loading?.pendingImages ?? 0) > 0 && Date.now() < until) {
         await delay(150, undefined, { signal });
         now = await this.observe();
+        signal.throwIfAborted();
       }
       return now;
     }
@@ -301,8 +336,8 @@ export class BrowserDriver implements Driver {
         if (action.kind !== 'refresh' && !response && this.page.url() === previous)
           throw new RecoverableActionError('no page in that history direction', 'Choose a visible route from the current page.');
       } catch (error) {
-        if (error instanceof RecoverableActionError) throw error;
         signal.throwIfAborted();
+        if (error instanceof RecoverableActionError) throw error;
         throw new RecoverableActionError('navigation did not finish in time', 'Observe the current page; it may still be loading or may have navigated.');
       }
       return this.observe();
@@ -312,6 +347,7 @@ export class BrowserDriver implements Driver {
       signal.throwIfAborted();
       return this.observe();
     }
+    if (action.kind === 'complete_milestone' || action.kind === 'modify_plan' || action.kind === 'inspect_more' || action.kind === 'request_vision') throw new Error('Use a running task for planning and recovery actions.');
     if (action.kind === 'switch' || action.kind === 'remember') throw new Error('Use a desktop session for switching and memory.');
     if (action.kind === 'click' && action.elementId.startsWith('ocr:')) {
       const target = observation.elements.find(e => e.id === action.elementId && e.source === 'ocr');
@@ -358,13 +394,17 @@ export class BrowserDriver implements Driver {
         if (!element) throw new StaleObservationError();
         signal.throwIfAborted();
         // No force:true: Playwright must validate visibility, stability, and occlusion.
+        // An already dispatched Playwright operation may finish after interruption. Keep
+        // each operation bounded, and never dispatch a subsequent input after abort.
         if (action.kind === 'click') await element.click({ timeout: 1800, button: action.button, clickCount: action.clickCount });
         if (action.kind === 'fill') {
           await element.fill(action.value, { timeout: 1800 });
+          signal.throwIfAborted();
           if (action.submit) await element.press('Enter', { timeout: 1800 });
         }
         if (action.kind === 'select') await element.selectOption({ value: action.value }, { timeout: 1800 });
       } catch (error) {
+        signal.throwIfAborted();
         if (error instanceof StaleObservationError) throw error;
         // Playwright's detailed error can echo a filled value. Classify it without exposing raw text.
         const detail = error instanceof Error ? error.message : '';

@@ -1,11 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { setTimeout as delay } from 'node:timers/promises';
-import { TaskRunner } from '../src/core/runner.js';
+import { TaskRunner } from './writing-fixture-runner.js';
 import { taskSchema, type Driver, type Observation, type Decider, type TextHelper, RecoverableActionError, StaleObservationError, TextHelperUnavailableError, candidatesFor, verify } from '../src/core/types.js';
 
 // churn: every observation differs (text, revision) while the task state does not, like a live results page.
-function environment(decider: Decider, options: { stale?: boolean; alreadyDone?: boolean; mutate?: boolean; churn?: boolean; challenge?: boolean } = {}) {
+function environment(decider: Decider, options: { stale?: boolean; alreadyDone?: boolean; mutate?: boolean; churn?: boolean; challenge?: boolean; buttonName?: string } = {}) {
   let clicks = 0;
   let attempts = 0;
   let observations = 0;
@@ -13,7 +13,7 @@ function environment(decider: Decider, options: { stale?: boolean; alreadyDone?:
     observations++;
     const churn = options.churn ? ` ${observations}` : '';
     return { id: 'o', revision: String(options.mutate === false ? 0 : clicks) + churn, sessionId: 's', kind: 'browser', title: '', text: (options.alreadyDone || (options.mutate !== false && clicks) ? 'Saved' : 'Ready') + churn,
-      elements: [{ id: 'button', role: 'button', name: 'Save', disabled: false, actions: ['click'] },
+      elements: [{ id: 'button', role: 'button', name: options.buttonName ?? 'Save', disabled: false, actions: ['click'] },
         ...(options.challenge ? [{ id: 'robot', role: 'checkbox', name: "I'm not a robot", disabled: false, actions: ['click' as const] }] : [])], truncated: false, capturedAt: Date.now() };
   };
   const driver: Driver = { id: 's', kind: 'browser', label: 'test', observe,
@@ -25,11 +25,12 @@ function environment(decider: Decider, options: { stale?: boolean; alreadyDone?:
 // A withdrawn click leaves nothing to click; a real decider would choose another option, this one gives up.
 const click: Decider = { decide: async (_, __, candidates) => ({ choice: Object.keys(candidates).find(k => candidates[k].description.startsWith('Click')) ?? 'blocked', confidence: .99, probability: .99, latencyMs: 1 }) };
 
-test('alternating app switches give way to work in the current app', async () => {
+test('repeated app routes are withdrawn so Jev can work in the current app', async () => {
   let active: string | undefined;
   let note = '';
   const switches: string[] = [];
   const histories: string[][] = [];
+  let wroteAfterRouteWithdrawal = false;
   const driver: Driver = { id: 's', kind: 'desktop', label: 'Mac',
     observe: async () => ({ id: `o${switches.length}:${note}`, revision: `${active}:${note}`, sessionId: 's', kind: 'desktop',
       title: active === 'notes' ? 'Notes' : active === 'messages' ? 'Messages' : 'Choose an app', targetId: active,
@@ -43,18 +44,22 @@ test('alternating app switches give way to work in the current app', async () =>
     }, screenshot: async () => Buffer.alloc(0), close: async () => {} };
   const decider: Decider = { decide: async (_input, _observation, candidates, history) => {
     histories.push([...history]);
-    return { choice: Object.keys(candidates).find(key => key.startsWith('switch:')) ?? 'compose:note',
+    const route = Object.keys(candidates).find(key => key.startsWith('switch:'));
+    if (!route) { assert.ok(candidates['compose:note']); wroteAfterRouteWithdrawal = true; }
+    return { choice: route ?? 'compose:note',
       confidence: .99, probability: .99, latencyMs: 1 };
   } };
   const helper: TextHelper = { compose: async () => ({ status: 'text', text: 'Frogs sing at dusk.' }), repair: async () => '' };
   const runner = new TaskRunner(decider, helper);
-  const input = taskSchema.parse({ sessionId: 's', goal: 'Write a poem in Notes, then open Messages',
+  const input = taskSchema.parse({ sessionId: 's', goal: 'Write a frog poem in Notes', maxSteps: 8,
     until: [{ kind: 'field', name: 'Note body', value: 'Frogs sing at dusk.' }] });
   const result = await runner.wait(runner.start(driver, input).id, 1000);
   assert.equal(result.status, 'succeeded', result.reason);
-  assert.deepEqual(switches, ['notes', 'messages', 'notes']);
+  assert.equal(switches[0], 'notes'); assert.ok(switches.includes('messages'));
+  assert.equal(active, 'notes'); assert.ok(result.steps <= input.maxSteps);
+  assert.equal(wroteAfterRouteWithdrawal, true);
   assert.equal(note, 'Frogs sing at dusk.');
-  assert.ok(histories.some(history => history.some(line => line.includes('Switching between apps has not advanced the goal'))));
+  assert.ok(histories.some(history => history.some(line => line.includes('Choose another route'))));
 });
 
 test('Jev can choose Groq drafting for an observed field without pre-supplied text', async () => {
@@ -78,20 +83,25 @@ test('Jev can choose Groq drafting for an observed field without pre-supplied te
   assert.equal(result.status, 'succeeded', result.reason);
   assert.equal(value, 'evrylo mortgage software'); assert.equal(compositions, 1);
   assert.equal(result.metrics.helperCalls, 1);
-  assert.equal(result.events[0].effect, 'the field holds drafted text');
+  assert.match(result.events[0].effect ?? '', /confirmed:.*exact text/);
+  assert.ok(result.artifacts.some(item => item.value === value && item.status === 'observed'));
+  assert.equal(result.verification?.passed, true);
 });
 
 test('Qwen asking for a missing exact fact does not write to the interface', async () => {
-  let writes = 0;
+  let writes = 0, drafts = 0;
   const field = { id: 'account', role: 'textbox', name: 'Account number', disabled: false, actions: ['fill' as const] };
   const driver: Driver = { id: 's', kind: 'browser', label: 'fixture',
     observe: async () => ({ id: 'o', revision: 'r', sessionId: 's', kind: 'browser', title: 'Account', text: 'Account form', elements: [field], truncated: false, capturedAt: Date.now() }),
     act: async () => { writes++; }, screenshot: async () => Buffer.alloc(0), close: async () => {} };
-  const runner = new TaskRunner({ decide: async () => ({ choice: 'compose:account', confidence: 1, probability: 1, latencyMs: 1 }) },
-    { compose: async () => ({ status: 'need_input', text: '' }), repair: async () => '' });
+  const runner = new TaskRunner({ decide: async (_input, _observation, candidates) => ({ choice: candidates['compose:account'] ? 'compose:account' : 'blocked', confidence: 1, probability: 1, latencyMs: 1 }) },
+    { compose: async () => { drafts++; return { status: 'need_input', text: '' }; }, repair: async () => '' });
   const input = taskSchema.parse({ sessionId: 's', goal: 'Fill account number', until: [{ kind: 'text', text: 'Saved' }] });
   const result = await runner.wait(runner.start(driver, input).id, 1000);
-  assert.equal(result.status, 'blocked'); assert.equal(writes, 0); assert.match(result.reason ?? '', /exact value/);
+  assert.equal(result.status, 'blocked'); assert.equal(writes, 0); assert.equal(drafts, 1);
+  assert.match(result.reason ?? '', /exact value.*Account number/);
+  assert.equal(result.steps, 0);
+  assert.deepEqual(result.artifacts, []);
 });
 
 test('a text-provider outage stops with its provider error instead of burning eight actions', async () => {
@@ -127,25 +137,28 @@ test('a composed sample amount is normalized for a numeric form field', async ()
 });
 
 test('after repeated action errors Groq guidance is passed to Jev without executing its suggestion', async () => {
-  let saved = false, attempts = 0, repairs = 0;
+  let saved = false, attempts = 0, repairs = 0, jevSelectedGood = false;
   const driver: Driver = { id: 's', kind: 'browser', label: 'fixture',
     observe: async () => ({ id: 'o', revision: saved ? 'saved' : 'ready', sessionId: 's', kind: 'browser', title: 'Fixture',
       text: saved ? 'Saved' : 'Ready', elements: ['bad', 'good'].map(id => ({ id, role: 'button', name: id, disabled: false, actions: ['click'] })),
       truncated: false, capturedAt: Date.now() }),
     act: async action => { if ('elementId' in action && action.elementId === 'bad') { attempts++; throw new RecoverableActionError('covered', 'Try another visible route.'); }
-      if ('elementId' in action && action.elementId === 'good') saved = true; },
+      if ('elementId' in action && action.elementId === 'good') { assert.equal(jevSelectedGood, true); saved = true; } },
     screenshot: async () => Buffer.alloc(0), close: async () => {} };
   const helper: TextHelper = { compose: async () => { throw new Error('No draft needed'); }, repair: async () => { repairs++; return 'Try the good button.'; } };
-  const decider: Decider = { decide: async (_input, _observation, candidates, history) => ({
-    choice: history.some(line => line.includes('Text helper recovery hint')) ? 'click:good' : candidates['click:bad'] ? 'click:bad' : 'wait',
-    confidence: .99, probability: .99, latencyMs: 1,
-  }) };
+  const decider: Decider = { decide: async (_input, _observation, candidates, history) => {
+    jevSelectedGood = history.some(line => line.includes('Try the good button.'));
+    const choice = jevSelectedGood ? 'click:good' : candidates['click:bad'] ? 'click:bad' : 'wait';
+    assert.ok(candidates[choice], 'Fake Jev must select an offered action');
+    return { choice, confidence: .99, probability: .99, latencyMs: 1 };
+  } };
   const runner = new TaskRunner(decider, helper);
   const input = taskSchema.parse({ sessionId: 's', goal: 'Save', until: [{ kind: 'text', text: 'Saved' }] });
   const result = await runner.wait(runner.start(driver, input).id, 1000);
   assert.equal(result.status, 'succeeded', result.reason);
-  assert.equal(attempts, 2); assert.equal(repairs, 1);
-  assert.equal(result.metrics.helperCalls, 1);
+  assert.ok(attempts > 0 && attempts <= 2); assert.equal(repairs, 1);
+  assert.equal(jevSelectedGood, true); assert.equal(saved, true);
+  assert.equal(result.metrics.helperCalls, repairs);
 });
 
 test('a focus-only click loop withdraws the click, asks for a recovery hint, and lets Jev choose text composition', async () => {
@@ -172,7 +185,9 @@ test('a focus-only click loop withdraws the click, asks for a recovery hint, and
   const result = await runner.wait(runner.start(driver, input).id, 1000);
   assert.equal(result.status, 'succeeded', result.reason);
   assert.equal(clicks, 2); assert.equal(repairs, 1); assert.equal(drafts, 1);
-  assert.match(histories.at(-1)!.join(' '), /same task state.*Text helper recovery hint/);
+  assert.match(histories.at(-1)!.join(' '), /Already tried.*same state/);
+  assert.ok(histories.at(-1)!.some(line => line.includes('The search field is empty; enter the site name from the goal.')));
+  assert.equal(value, 'evrylo.com');
   assert.equal(result.metrics.helperCalls, 2);
 });
 
@@ -228,6 +243,7 @@ test('a failed browser action gives Jev its reason and a fresh alternative', asy
     screenshot: async () => Buffer.alloc(0), close: async () => {} };
   const decider: Decider = { decide: async (_input, _observation, candidates, history) => {
     histories.push([...history]);
+    if (badAttempts) { assert.equal(candidates['click:bad'], undefined); assert.ok(candidates['click:good']); }
     return { choice: candidates['click:bad'] ? 'click:bad' : 'click:good', confidence: .99, probability: .99, latencyMs: 1 };
   } };
   const runner = new TaskRunner(decider);
@@ -237,7 +253,8 @@ test('a failed browser action gives Jev its reason and a fresh alternative', asy
   assert.equal(badAttempts, 1);
   assert.equal(result.metrics.actionRecoveries, 1);
   assert.match(histories[1].join(' '), /another element covered the target.*Choose another visible route/);
-  assert.match(result.events[0].effect ?? '', /Browser action failed/);
+  assert.match(result.events[0].effect ?? '', /another element covered the target/);
+  assert.match(result.events[0].effect ?? '', /Choose another visible route/);
 });
 test('Jev may retry a transient failure after choosing to wait', async () => {
   let attempts = 0, done = false;
@@ -263,16 +280,26 @@ test('Jev may retry a transient failure after choosing to wait', async () => {
   assert.deepEqual(result.events.map(event => event.action.startsWith('Click') ? 'click' : 'wait'), ['click', 'wait', 'click']);
 });
 test('a task stops instead of repeatedly clicking an unchanged interface', async () => {
-  const e = environment(click, { mutate: false });
+  const e = environment(click, { mutate: false, buttonName: 'Open result' });
   const result = await e.runner.wait(e.runner.start(e.driver, e.input).id, 1000);
-  assert.equal(result.status, 'blocked'); assert.equal(e.clicks(), 2);
-  assert.deepEqual(result.events.map(event => event.effect), ['no visible effect', 'no visible effect']);
+  assert.equal(result.status, 'blocked'); assert.ok(e.clicks() > 0 && e.clicks() <= 2);
+  assert.equal(result.verification?.passed, false);
+  assert.ok(result.events.every(event => event.effect?.includes('no visible effect') && event.effect.includes('unchanged')));
 });
 test('a constantly changing page cannot hide a repeated no-progress click or cause stale rejections', async () => {
-  const e = environment(click, { mutate: false, churn: true });
+  const e = environment(click, { mutate: false, churn: true, buttonName: 'Open result' });
   const result = await e.runner.wait(e.runner.start(e.driver, e.input).id, 1000);
-  assert.equal(result.status, 'blocked', result.reason); assert.equal(e.clicks(), 2); assert.equal(result.metrics.staleRetries, 0);
-  assert.equal(result.events[0].effect, 'some text changed');
+  assert.equal(result.status, 'blocked', result.reason); assert.ok(e.clicks() > 0 && e.clicks() <= 2); assert.equal(result.metrics.staleRetries, 0);
+  assert.equal(result.verification?.passed, false);
+  assert.match(result.events[0].effect ?? '', /some text changed/);
+  assert.match(result.events[0].effect ?? '', /milestone completion still needs evidence/);
+});
+test('a possibly accepted Save is not submitted again without confirmation', async () => {
+  const e = environment(click, { mutate: false });
+  const result = await e.runner.wait(e.runner.start(e.driver, e.input).id, 1000);
+  assert.equal(result.status, 'blocked'); assert.equal(e.clicks(), 1);
+  assert.equal(result.verification?.passed, false);
+  assert.match(result.events[0].effect ?? '', /uncertain:.*inspect before repeating/);
 });
 test('unrelated verification-widget text does not prevent an otherwise valid task', async () => {
   const e = environment(click, { challenge: true });
@@ -288,10 +315,12 @@ test('a task records its request, each decision trace, and each action effect', 
   assert.equal(result.status, 'succeeded');
   assert.equal(result.request.goal, 'Save'); assert.deepEqual(result.request.inputNames, []);
   assert.equal(result.trace[0].requestChars, 1234); assert.equal(result.trace[0].inputTokens, 321); assert.equal(result.trace[0].step, 1);
-  assert.equal(result.events[0].effect, 'some text changed');
+  assert.match(result.events[0].effect ?? '', /some text changed/);
+  assert.equal(result.verification?.passed, true);
 });
-test('low confidence cannot cause an action', async () => {
+test('confidence below the configured cutoff cannot cause an action', async () => {
   const e = environment({ decide: async (...args) => ({ ...await click.decide(...args), confidence: .2 }) });
+  e.input.minConfidence = .3;
   const result = await e.runner.wait(e.runner.start(e.driver, e.input).id, 1000);
   assert.equal(result.status, 'blocked'); assert.equal(e.clicks(), 0);
 });

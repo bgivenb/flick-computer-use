@@ -47,6 +47,12 @@
     .track { height: 7px; background: #2e394b; border-radius: 8px; flex: 1; overflow: hidden; }
     .track i { display: block; height: 100%; background: #9ca5ff; }
     .bar b { min-width: 48px; text-align: right; font-size: 12px; }
+    .progress { margin: 12px 0 18px; padding: 15px 18px; }
+    .progress ol { margin: 10px 0; padding-left: 24px; }
+    .progress li { margin: 7px 0; color: #aeb8c9; }
+    .progress li.active { color: #c2c8ff; font-weight: 600; }
+    .progress li.complete { color: #92d9b1; }
+    .progress li small { display: block; font-weight: 400; }
     .error { color: #ffabb5; }
     .subtle { color: #9eabc0; font-size: 13px; }
     @media(max-width: 600px) { main { padding: 18px 14px 40px; } .row { display: block; } header { align-items: flex-start; } .badge { font-size: 12px; } }
@@ -78,17 +84,18 @@
 
   <section id="task-panel" hidden>
     <h2>Give Flick a computer goal</h2>
-    <p>One goal starts one autonomous Flick task. Jev chooses the actions; this page shows the live action log. No task runs until you press Run.</p>
-    <div id="task-feed" class="feed" aria-live="polite"><div class="bubble system">Choose which apps Flick can use, describe the goal, and give a short exact phrase the interface should show when it is done.</div></div>
+    <p>One goal starts one autonomous Flick task. Jev chooses actions and works through a checklist of results. The live checklist and action log show its progress. Using your mouse or keyboard pauses Flick; press Continue to resume. No task runs until you press Run.</p>
+    <div id="task-feed" class="feed" aria-live="polite"><div class="bubble system">Choose which apps Flick can use and describe the result. Flick keeps a checklist, saves text for reuse, and loads app guidance when relevant.</div></div>
+    <div id="task-progress" class="card progress" hidden aria-live="polite"><strong id="plan-label">Task checklist</strong><ol id="task-plan"></ol><div id="task-guides" class="subtle"></div><div id="task-artifacts" class="subtle"></div></div>
     <form id="task-form" class="card">
       <div class="row"><div><label for="target">Apps Flick can use</label><select id="target"><option value="mac-any">Any Mac app</option><option value="mac-specific">One Mac app</option><option value="browser">Existing Chrome (fast)</option></select></div>
         <div id="bundle-wrap" hidden><label for="bundle">Mac app bundle ID</label><input id="bundle" placeholder="com.apple.TextEdit"></div>
         <div id="url-wrap" hidden><label for="url">Starting URL</label><input id="url" type="url" placeholder="https://example.com/"></div></div>
       <label for="goal">What should Jev do?</label><textarea id="goal" placeholder="Describe the overall result, not a click-by-click plan." required></textarea>
-      <label for="done">Done when visible text or page URL contains</label><input id="done" placeholder="A visible phrase, or the destination URL" required>
+      <label for="done">Additional completion check <small>(optional)</small></label><input id="done" placeholder="Exact visible text or part of the destination URL"><div class="subtle">Leave empty to use the task’s verified checklist. If filled, this exact check must also pass.</div>
       <label for="min-confidence">Minimum Jev confidence <small>(0 disables the cutoff)</small></label>
-      <input id="min-confidence" type="number" min="0" max="1" step="0.05" value="0">
-      <label for="values">Exact text or values to type <small>(optional; Qwen can draft prose or search terms when configured)</small></label><textarea id="values" placeholder='Plain text, or JSON such as {"post":"...","date":"9/26/2026"}' style="min-height:68px"></textarea>
+      <input id="min-confidence" type="number" min="0" max="1" step="0.05" value="0.10">
+      <label for="values">Exact text or values to type <small>(optional; the text helper can draft text and reuse saved values)</small></label><textarea id="values" placeholder='Plain text, or JSON such as {"post":"...","date":"9/26/2026"}' style="min-height:68px"></textarea>
       <div class="actions"><button id="run" type="submit">Run with Flick</button><button id="stop" type="button" class="secondary" disabled>Stop</button></div>
       <details id="continue-wrap" hidden><summary>Continue a stopped task</summary><label for="guidance">Your guidance</label><textarea id="guidance" placeholder="Give missing context or a new constraint. Jev will still choose the actions."></textarea><label for="more-values">Additional exact values</label><textarea id="more-values" placeholder="Plain text or JSON" style="min-height:60px"></textarea><div class="actions"><button id="continue" type="button">Continue</button></div></details>
     </form>
@@ -147,17 +154,32 @@
 
   $('target').onchange = () => { $('url-wrap').hidden = $('target').value !== 'browser'; $('bundle-wrap').hidden = $('target').value !== 'mac-specific'; };
   let currentTask, seen = 0, ended = false, polling = false;
+  function renderProgress(status) {
+    const steps = status.plan?.steps || [];
+    $('task-progress').hidden = !steps.length && !(status.guides || []).length && !(status.artifacts || []).length;
+    $('plan-label').textContent = steps.length ? `Task checklist · ${steps.filter(step => step.status === 'complete').length}/${steps.length} verified` : 'Task context';
+    $('task-plan').replaceChildren();
+    for (const step of steps) {
+      const item = document.createElement('li'); item.className = step.status;
+      item.textContent = `${step.status === 'complete' ? '✓ ' : step.status === 'active' ? '→ ' : ''}${step.objective}`;
+      if (step.status === 'active') { const detail = document.createElement('small'); detail.textContent = 'Current milestone'; item.append(detail); }
+      $('task-plan').append(item);
+    }
+    $('task-guides').textContent = status.guides?.length ? `Guidance: ${status.guides.map(guide => guide.name).join(' · ')}` : '';
+    $('task-artifacts').textContent = status.artifacts?.length ? `${status.artifacts.length} saved text item${status.artifacts.length === 1 ? '' : 's'} available for reuse` : '';
+  }
   async function poll() {
     if (!currentTask || polling) return; polling = true;
     try {
       const status = await api('/api/task');
       if (!status) return;
+      renderProgress(status);
       for (const event of (status.events || []).slice(seen)) bubble(taskFeed, `Jev · step ${event.step}${event.confidence == null ? '' : ` · ${Math.round(event.confidence * 100)}% confidence`}`, `${event.action}${event.effect ? '\n' + event.effect : ''}`);
       seen = (status.events || []).length;
       if (status.status !== 'running' && !ended) {
         ended = true; $('run').disabled = false; $('stop').disabled = true;
         $('continue-wrap').hidden = status.status === 'succeeded';
-        bubble(taskFeed, status.status, `${status.reason || ''}\n${status.steps} actions · ${(status.metrics?.elapsedMs / 1000 || 0).toFixed(2)} s`);
+        bubble(taskFeed, status.status === 'interrupted' ? 'Paused · you took control' : status.status, `${status.reason || ''}\n${status.steps} actions · ${(status.metrics?.elapsedMs / 1000 || 0).toFixed(2)} s`);
       }
     } catch (error) { bubble(taskFeed, 'Error', error.message, 'error'); }
     finally { polling = false; }
@@ -170,7 +192,7 @@
       minConfidence: Number($('min-confidence').value) };
     try {
       const started = await api('/api/task/start', data);
-      currentTask = started.id; seen = 0; ended = false; taskFeed.replaceChildren();
+      currentTask = started.id; seen = 0; ended = false; taskFeed.replaceChildren(); renderProgress(started);
       bubble(taskFeed, 'You', data.goal, 'user'); bubble(taskFeed, 'Flick', 'Running one goal. Jev is choosing the actions.');
       $('stop').disabled = false; void poll();
     } catch (error) { $('run').disabled = false; bubble(taskFeed, 'Error', error.message, 'error'); }

@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { BrowserDriver } from '../src/drivers/browser.js';
 import { copyObservedText, withCopyableText } from '../src/core/copy-text.js';
 import { verify, type Driver, type Observation } from '../src/core/types.js';
+import { expectedResult } from '../src/core/task-state.js';
 import { fixture } from './fixture.js';
 
 test('browser text is selected from the observation and copied verbatim', async () => {
@@ -37,4 +38,18 @@ test('changed text is rejected before the clipboard writer runs', async () => {
   let writes = 0;
   await assert.rejects(copyObservedText(driver, view, source, new AbortController().signal, async () => { writes++; }), /interface changed/);
   assert.equal(writes, 0);
+});
+
+test('copy feedback confirms identical clipboard text without requiring a counter change', async () => {
+  const base: Observation = {id:'o',revision:'r',sessionId:'s',kind:'browser',title:'Page',
+    text:'Exact source text',elements:[],truncated:false,capturedAt:0,
+    clipboard:{changeCount:7,hasImage:false,copiedText:'Exact source text'}};
+  const before=withCopyableText(base);
+  const source=before.elements.find(e=>e.id==='read:page-text')!;
+  const after=await copyObservedText({observe:async()=>base} as Driver,before,source,new AbortController().signal,async()=>{});
+  const action={kind:'copy_text',elementId:source.id} as const;
+  assert.equal(after.clipboard?.changeCount,7);
+  assert.equal(expectedResult(action,before,after).status,'confirmed');
+  assert.equal(expectedResult(action,before,{...after,clipboard:{changeCount:8,hasImage:false,copiedText:'Wrong text'}}).status,'uncertain');
+  assert.equal(expectedResult(action,before,{...after,clipboard:undefined}).status,'uncertain');
 });

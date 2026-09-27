@@ -1,0 +1,70 @@
+{
+  "schemaVersion": 1,
+  "id": "macos-chrome",
+  "name": "Chrome windows and tabs on macOS",
+  "version": 1,
+  "match": {
+    "bundleIds": [
+      "com.google.Chrome"
+    ]
+  },
+  "instructions": [
+    {
+      "id": "profile-context",
+      "text": "Chrome profiles keep browsing information separate. The Profile menu shows and switches profiles; use the identity required by the task and verify website account identity independently.",
+      "status": "documented",
+      "provenance": {
+        "source": "builtin",
+        "reference": "https://support.google.com/chrome/answer/2364824?hl=en"
+      }
+    },
+    {
+      "id": "find-tab",
+      "text": "Chrome supports tab search and choosing an existing tab. If Flick supplies a tab list, select the observed tab by its title and URL, then verify the active page.",
+      "status": "documented",
+      "provenance": {
+        "source": "builtin",
+        "reference": "https://support.google.com/chrome/answer/2391819?hl=en&co=GENIE.Platform%3DDesktop"
+      }
+    },
+    {
+      "id": "tab-menu",
+      "text": "A tab context menu contains tab-management actions. Read the open menu before selecting an item; menu contents vary with the tab and window state.",
+      "status": "documented",
+      "provenance": {
+        "source": "builtin",
+        "reference": "https://support.google.com/chrome/answer/2391819?hl=en&co=GENIE.Platform%3DDesktop"
+      }
+    },
+    {
+      "id": "browser-versus-window",
+      "text": "Use the page’s observed controls for website work. Native Chrome observations are useful for the tab strip, profile menu, and system dialogs; returning to an already selected page is not progress by itself.",
+      "status": "documented",
+      "provenance": {
+        "source": "builtin",
+        "evidence": "Project workflow guidance, not validated live in this app. Flick browser/native driver distinction and observed-control contract; no website selector is embedded.",
+        "reference": "https://github.com/bgivenb/flick-computer-use/blob/main/src/core/runner.ts"
+      }
+    },
+    {
+      "id": "wait-for-target",
+      "text": "After navigation, choose the available wait action when the expected page or content is still loading. Verify title, URL, and relevant controls before retrying navigation or changing tabs.",
+      "status": "documented",
+      "provenance": {
+        "source": "builtin",
+        "evidence": "Project workflow guidance, not validated live in this app. Flick exposes wait_for_load and wait_for_change when applicable; suggested outcome-based recovery.",
+        "reference": "https://github.com/bgivenb/flick-computer-use/blob/main/src/core/runner.ts"
+      }
+    },
+    {
+      "id": "preserve-work",
+      "text": "Retain exact text and the current milestone before changing tabs or apps. After switching, locate the destination control before pasting; a browser window alone does not identify the intended page.",
+      "status": "documented",
+      "provenance": {
+        "source": "builtin",
+        "evidence": "Project workflow guidance, not validated live in this app. Proposed cross-app and cross-tab focus check using retained task state.",
+        "reference": "https://github.com/bgivenb/flick-computer-use/blob/main/src/core/runner.ts"
+      }
+    }
+  ]
+}

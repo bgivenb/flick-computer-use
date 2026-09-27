@@ -19,6 +19,7 @@ export function loadConfig() {
     openaiApiKey: process.env.OPENAI_API_KEY,
     openaiModel: process.env.OPENAI_MODEL || 'gpt-6-luna',
     localDir,
+    userActivityPath: resolve(root, '.local/bin/flick-user-activity'),
     nativePath: resolve(root, '.local/bin/jev-macos'),
     ocrImagePath: resolve(root, '.local/bin/flick-ocr-image'),
   };

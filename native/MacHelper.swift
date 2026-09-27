@@ -2,9 +2,41 @@ import AppKit
 import ApplicationServices
 import CryptoKit
 import Vision
+import Dispatch
 
 enum HelperError: Error { case message(String) }
 func fail(_ message: String) throws -> Never { throw HelperError.message(message) }
+
+// SIGUSR1 is consumed on a dispatch queue, never in a raw signal handler. The
+// JSONL loop can be blocked in an action while this queue requests interruption.
+final class ActionInterruption: @unchecked Sendable {
+    private let lock = NSLock()
+    private var interrupted = false
+    func reset() { lock.lock(); interrupted = false; lock.unlock() }
+    func interrupt() { lock.lock(); interrupted = true; lock.unlock() }
+    func check() throws {
+        lock.lock(); let stopped = interrupted; lock.unlock()
+        if stopped { try fail("USER_INPUT_INTERRUPTED") }
+    }
+}
+let actionInterruption = ActionInterruption()
+signal(SIGUSR1, SIG_IGN)
+let interruptionSource = DispatchSource.makeSignalSource(signal: SIGUSR1, queue: DispatchQueue.global(qos: .userInteractive))
+interruptionSource.setEventHandler { actionInterruption.interrupt() }
+interruptionSource.resume()
+
+func emit(_ output: [String: Any]) {
+    if let data = try? JSONSerialization.data(withJSONObject: output, options: [.sortedKeys]), let text = String(data: data, encoding: .utf8) {
+        print(text)
+        fflush(stdout)
+    }
+}
+func beginInterruptibleRequest(_ request: [String: Any]) {
+    actionInterruption.reset()
+    // The bridge waits for this before sending an already requested interrupt,
+    // so cancellation cannot be lost when a queued action resets its flag.
+    emit(["id": request["id"] ?? NSNull(), "event": "started"])
+}
 func attr(_ element: AXUIElement, _ name: String) -> CFTypeRef? {
     var value: CFTypeRef?
     return AXUIElementCopyAttributeValue(element, name as CFString, &value) == .success ? value : nil
@@ -92,13 +124,16 @@ func forgetUnseen() {
     for (hash, list) in keyIndex { let kept = list.filter { !stale.contains($0.key) }; keyIndex[hash] = kept.isEmpty ? nil : kept }
 }
 
-func clickPoint(_ point: CGPoint, button: String = "left", count: Int = 1) {
+func clickPoint(_ point: CGPoint, button: String = "left", count: Int = 1) throws {
     let source = CGEventSource(stateID: .privateState)
     let mouseButton: CGMouseButton = button == "right" ? .right : button == "middle" ? .center : .left
     let down: CGEventType = button == "right" ? .rightMouseDown : button == "middle" ? .otherMouseDown : .leftMouseDown
     let up: CGEventType = button == "right" ? .rightMouseUp : button == "middle" ? .otherMouseUp : .leftMouseUp
     for index in 1...count {
+      try actionInterruption.check()
       for type: CGEventType in [.mouseMoved, down, up] {
+        // Once down is posted, always release it before honoring an interrupt.
+        if type != up { try actionInterruption.check() }
         let event = CGEvent(mouseEventSource: source, mouseType: type, mouseCursorPosition: point, mouseButton: mouseButton)
         event?.flags = []
         event?.setIntegerValueField(.mouseEventButtonNumber, value: Int64(mouseButton.rawValue))
@@ -106,21 +141,25 @@ func clickPoint(_ point: CGPoint, button: String = "left", count: Int = 1) {
         event?.post(tap: .cghidEventTap)
         Thread.sleep(forTimeInterval: 0.008)
       }
+      try actionInterruption.check()
     }
 }
 // Keyboard input goes to the frontmost app, which every action verifies is the target first.
-func postKey(_ code: CGKeyCode, flags: CGEventFlags = []) {
+func postKey(_ code: CGKeyCode, flags: CGEventFlags = []) throws {
+    try actionInterruption.check()
     for down in [true, false] {
         let event = CGEvent(keyboardEventSource: nil, virtualKey: code, keyDown: down)
         event?.flags = flags
         event?.post(tap: .cghidEventTap)
         Thread.sleep(forTimeInterval: 0.004)
     }
+    try actionInterruption.check()
 }
-func typeText(_ text: String) {
+func typeText(_ text: String) throws {
     let units = Array(text.utf16)
     var index = 0
     while index < units.count {
+        try actionInterruption.check()
         var end = min(index + 16, units.count)
         if end < units.count, UTF16.isLeadSurrogate(units[end - 1]) { end -= 1 }
         let chunk = Array(units[index..<end])
@@ -132,6 +171,7 @@ func typeText(_ text: String) {
         index = end
         Thread.sleep(forTimeInterval: 0.006)
     }
+    try actionInterruption.check()
 }
 
 func frontmostPID() -> pid_t? {
@@ -182,14 +222,18 @@ func windowArea() -> CGRect? {
 }
 
 func application(_ request: [String: Any]) throws -> NSRunningApplication {
+    try actionInterruption.check()
     guard let bundle = request["bundleId"] as? String else { try fail("Missing bundle ID.") }
     if let app = NSRunningApplication.runningApplications(withBundleIdentifier: bundle).first,
        let windows = attr(AXUIElementCreateApplication(app.processIdentifier), kAXWindowsAttribute) as? [AXUIElement], !windows.isEmpty { return app }
     let process = Process(); process.executableURL = URL(fileURLWithPath: "/usr/bin/open"); process.arguments = ["-b", bundle]
     process.standardError = FileHandle.nullDevice
+    try actionInterruption.check()
     try process.run(); process.waitUntilExit()
+    try actionInterruption.check()
     guard process.terminationStatus == 0 else { try fail("Could not launch target application.") }
     for _ in 0..<30 {
+        try actionInterruption.check()
         if let app = NSRunningApplication.runningApplications(withBundleIdentifier: bundle).first { return app }
         Thread.sleep(forTimeInterval: 0.1)
     }
@@ -219,11 +263,15 @@ func openMenu(_ root: AXUIElement) -> AXUIElement? {
     }
     return nil
 }
-func awaitMenu(_ root: AXUIElement, at point: CGPoint) {
+func awaitMenu(_ root: AXUIElement, at point: CGPoint) throws {
     lastRightClick = (Date(), point)
     menuSeen = false
     let deadline = Date().addingTimeInterval(0.6)
-    while Date() < deadline, openMenu(root) == nil { RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.015)) }
+    while Date() < deadline, openMenu(root) == nil {
+        try actionInterruption.check()
+        RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.015))
+    }
+    try actionInterruption.check()
 }
 
 func observe(_ ocrMode: String = "auto") throws -> [String: Any] {
@@ -378,6 +426,7 @@ func observe(_ ocrMode: String = "auto") throws -> [String: Any] {
     let imageTypes: [NSPasteboard.PasteboardType] = [.png, .tiff]
     var output: [String: Any] = ["title": title, "text": text, "elements": result, "revision": latestRevision, "truncated": truncated, "ocr": ocr,
             "clipboard": ["changeCount": clipboard.changeCount, "hasImage": imageTypes.contains { clipboard.types?.contains($0) == true }]]
+    if let bundleId = app.bundleIdentifier { output["targetId"] = bundleId }
     if let focused = element(attr(root, kAXFocusedUIElementAttribute)), let focusedKey = knownKey(focused) { output["focusedId"] = focusedKey }
     if let menu { output["modal"] = ["kind": "menu", "label": string(menu, kAXTitleAttribute)] }
     return output
@@ -425,27 +474,36 @@ func isSame(_ node: AXUIElement, orInside container: AXUIElement) -> Bool {
     while let item = current, steps < 12 { if CFEqual(item, container) { return true }; current = parent(item); steps += 1 }
     return false
 }
-func focus(_ node: AXUIElement) -> Bool {
+func focus(_ node: AXUIElement) throws -> Bool {
+    try actionInterruption.check()
     AXUIElementSetAttributeValue(node, kAXFocusedAttribute as CFString, kCFBooleanTrue)
     Thread.sleep(forTimeInterval: 0.04)
+    try actionInterruption.check()
     guard let app = currentApp, let focused = element(attr(AXUIElementCreateApplication(app.processIdentifier), kAXFocusedUIElementAttribute)) else { return false }
     return isSame(focused, orInside: node)
 }
 // Leaves keyboard focus in the field, as typing would, so a following Enter reaches it.
 func fill(_ node: AXUIElement, _ value: String) throws {
+    try actionInterruption.check()
     var settable: DarwinBoolean = false
     AXUIElementIsAttributeSettable(node, kAXValueAttribute as CFString, &settable)
-    if settable.boolValue, AXUIElementSetAttributeValue(node, kAXValueAttribute as CFString, value as CFString) == .success, string(node, kAXValueAttribute) == value { _ = focus(node); return }
+    try actionInterruption.check()
+    if settable.boolValue, AXUIElementSetAttributeValue(node, kAXValueAttribute as CFString, value as CFString) == .success, string(node, kAXValueAttribute) == value {
+        try actionInterruption.check()
+        _ = try focus(node); return
+    }
     // Rich editors can accept an Accessibility value without updating their own state; type into them instead.
     // A newline could submit a form or send a message, so multi-line text is never typed.
     guard !value.contains(where: \.isNewline) else { try fail("Multi-line text could not be set directly and is not typed, because a newline could submit. Paste it instead.") }
-    guard focus(node) else { try fail("Could not focus the field to type into it.") }
-    postKey(0, flags: .maskCommand)
-    typeText(value)
+    guard try focus(node) else { try fail("Could not focus the field to type into it.") }
+    try postKey(0, flags: .maskCommand)
+    try typeText(value)
     Thread.sleep(forTimeInterval: 0.05)
+    try actionInterruption.check()
 }
 
 func action(_ request: [String: Any]) throws -> [String: Any] {
+    try actionInterruption.check()
     guard let app = currentApp, frontmostPID() == app.processIdentifier else { try fail("Focus moved to another application. Inspect and refocus before acting.") }
     guard let data = request["action"] as? [String: Any], let kind = data["kind"] as? String else { try fail("Missing action.") }
     let root = AXUIElementCreateApplication(app.processIdentifier)
@@ -459,9 +517,10 @@ func action(_ request: [String: Any]) throws -> [String: Any] {
         guard request["revision"] as? String == latestRevision, let target = ocrTargets[elementId] else { try fail("STALE_OBSERVATION") }
         let point = CGPoint(x: target.rect.midX, y: target.rect.midY)
         let pressable = try clearedTarget(at: point, expecting: nil, text: target.text)
+        try actionInterruption.check()
         if button == "left", clickCount == 1, let pressable, AXUIElementPerformAction(pressable, kAXPressAction as CFString) == .success { return ["ok": true, "source": "ocr", "pressed": true] }
-        clickPoint(point, button: button, count: clickCount)
-        if button == "right" { awaitMenu(root, at: point) }
+        try clickPoint(point, button: button, count: clickCount)
+        if button == "right" { try awaitMenu(root, at: point) }
         return ["ok": true, "source": "ocr"]
     }
     if kind == "click" || kind == "fill" {
@@ -471,18 +530,20 @@ func action(_ request: [String: Any]) throws -> [String: Any] {
         if (values[kAXEnabledAttribute] as? NSNumber)?.boolValue == false { try fail("The control is disabled.") }
         if values[kAXSubroleAttribute] as? String == kAXSecureTextFieldSubrole { try fail("Secure fields must be handled manually.") }
         if kind == "click" {
+            try actionInterruption.check()
             if button == "left" && clickCount == 1 && AXUIElementPerformAction(entry.node, kAXPressAction as CFString) == .success { return ["ok": true] }
             guard let rect = frame(values), !rect.isEmpty else { try fail("Accessibility press failed and no control bounds are available.") }
             let point = CGPoint(x: rect.midX, y: rect.midY)
             _ = try clearedTarget(at: point, expecting: entry.node, text: nil)
-            clickPoint(point, button: button, count: clickCount)
-            if button == "right" { awaitMenu(root, at: point) }
+            try clickPoint(point, button: button, count: clickCount)
+            if button == "right" { try awaitMenu(root, at: point) }
         } else {
             guard let value = data["value"] as? String else { try fail("Missing fill value.") }
             try fill(entry.node, value)
             if data["submit"] as? Bool == true {
-                guard focus(entry.node) else { try fail("The value was entered, but the field could not take focus to submit it.") }
-                postKey(36)
+                try actionInterruption.check()
+                guard try focus(entry.node) else { try fail("The value was entered, but the field could not take focus to submit it.") }
+                try postKey(36)
             }
         }
     } else if kind == "press" {
@@ -495,13 +556,15 @@ func action(_ request: [String: Any]) throws -> [String: Any] {
             if modifier == "Meta" { flags.insert(.maskCommand) }; if modifier == "Shift" { flags.insert(.maskShift) }
             if modifier == "Alt" { flags.insert(.maskAlternate) }; if modifier == "Control" { flags.insert(.maskControl) }
         }
-        postKey(code, flags: flags)
+        try postKey(code, flags: flags)
     } else if kind == "scroll" {
         let direction: Int32 = data["direction"] as? String == "up" ? 400 : -400
         let event = CGEvent(scrollWheelEvent2Source: nil, units: .pixel, wheelCount: 1, wheel1: direction, wheel2: 0, wheel3: 0)
         if let window = latestWindowFrame { event?.location = CGPoint(x: window.midX, y: window.midY) }
+        try actionInterruption.check()
         event?.postToPid(app.processIdentifier)
     } else { try fail("Unsupported native action.") }
+    try actionInterruption.check()
     return ["ok": true]
 }
 
@@ -533,17 +596,21 @@ func handle(_ request: [String: Any]) throws -> [String: Any] {
         }
         return ["apps": apps.values.sorted { ($0["name"] as? String ?? "") < ($1["name"] as? String ?? "") }]
     case "connect":
+        beginInterruptibleRequest(request)
         guard AXIsProcessTrusted() else { try fail("Accessibility permission is required. Run doctor for setup instructions.") }
         currentApp = try application(request)
         defaultOCR = request["ocr"] as? String ?? "auto"
         entries = [:]; keyIndex = [:]; latestWindow = nil; latestWindowFrame = nil; latestMenuFrame = nil; lastRightClick = nil
         // Chromium/Electron publish their full tree only after an accessibility client opts in.
+        try actionInterruption.check()
         AXUIElementSetAttributeValue(AXUIElementCreateApplication(currentApp!.processIdentifier), "AXManualAccessibility" as CFString, kCFBooleanTrue)
+        try actionInterruption.check()
         guard currentApp!.activate(options: []) else { try fail("Could not activate target application.") }
         RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.12))
+        try actionInterruption.check()
         return ["connected": true]
     case "observe": return try observe(request["ocr"] as? String ?? defaultOCR)
-    case "act": return try action(request)
+    case "act": beginInterruptibleRequest(request); return try action(request)
     case "screenshot":
         guard let area = windowArea() else { try fail("No capturable window.") }
         return ["png": try captureRegion(area).0.base64EncodedString()]
@@ -559,8 +626,5 @@ while let line = readLine() {
         output["result"] = try handle(request)
     } catch HelperError.message(let message) { output["error"] = message }
       catch { output["error"] = "Native helper operation failed." }
-    if let data = try? JSONSerialization.data(withJSONObject: output, options: [.sortedKeys]), let text = String(data: data, encoding: .utf8) {
-        print(text)
-        fflush(stdout)
-    }
+    emit(output)
 }

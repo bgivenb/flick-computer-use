@@ -3,6 +3,7 @@ import { z } from 'zod';
 export const actionSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('click'), elementId: z.string(), button: z.enum(['left', 'right', 'middle']).optional(), clickCount: z.number().int().min(1).max(2).optional() }),
   z.object({ kind: z.literal('fill'), elementId: z.string(), value: z.string().max(10000), submit: z.boolean().optional() }),
+  z.object({ kind: z.literal('draft') }),
   z.object({ kind: z.literal('compose'), elementId: z.string() }),
   z.object({ kind: z.literal('copy_text'), elementId: z.string() }),
   z.object({ kind: z.literal('select'), elementId: z.string(), value: z.string().max(1000) }),
@@ -21,6 +22,10 @@ export const actionSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('switch_tab'), tabId: z.string() }),
   z.object({ kind: z.literal('switch'), targetId: z.string() }),
   z.object({ kind: z.literal('remember'), elementId: z.string() }),
+  z.object({ kind: z.literal('complete_milestone') }),
+  z.object({ kind: z.literal('modify_plan') }),
+  z.object({ kind: z.literal('inspect_more') }),
+  z.object({ kind: z.literal('request_vision') }),
 ]);
 export type Action = z.infer<typeof actionSchema>;
 export const conditionSchema = z.discriminatedUnion('kind', [
@@ -36,15 +41,28 @@ export const conditionSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('field_from_memory'), name: z.string().min(1), source: z.string().min(1) }),
 ]);
 export type Condition = z.infer<typeof conditionSchema>;
+export const planStepSchema = z.object({
+  objective: z.string().min(1).max(400), doneWhen: z.string().min(1).max(600),
+  targetHint: z.string().max(120).optional(), produces: z.string().min(1).max(80).optional(),
+  uses: z.array(z.string().min(1).max(80)).max(8).default([]),
+});
+export type PlanStepDraft = z.infer<typeof planStepSchema>;
+export interface TaskPlan { revision: number; steps: Array<PlanStepDraft & {
+  id: string; status: 'pending' | 'active' | 'complete'; evidence?: string; evidenceRecords?: Array<{id:string; text:string}>;
+}> }
+export interface TaskArtifact { key: string; value: string; source: string; status: 'drafted' | 'observed' }
 export const taskSchema = z.object({
   sessionId: z.string(),
   goal: z.string().min(1).max(6000),
   inputs: z.record(z.string().max(100), z.string().max(10000)).default({}),
-  until: z.array(conditionSchema).min(1).max(12),
+  until: z.array(conditionSchema).max(12).default([]),
+  plan: z.array(planStepSchema).min(1).max(8).optional(),
+  planning: z.enum(['auto', 'off']).optional(),
   maxSteps: z.number().int().min(1).max(120).default(25),
   timeoutMs: z.number().int().min(1000).max(300000).default(60000),
-  minConfidence: z.number().min(0).max(1).default(0.55),
-}).refine(v => Object.keys(v.inputs).length <= 20, 'Supply at most 20 input values');
+  minConfidence: z.number().min(0).max(1).default(0.10),
+}).refine(v => Object.keys(v.inputs).length <= 20, 'Supply at most 20 input values')
+  .refine(v => v.planning !== 'off' || v.until.length > 0, 'Planning off requires an explicit completion condition');
 export type TaskInput = z.infer<typeof taskSchema>;
 export interface ElementInfo {
   id: string;
@@ -99,6 +117,7 @@ export interface Driver {
   readonly id: string;
   readonly kind: 'browser' | 'macos' | 'desktop';
   readonly label: string;
+  readonly userActivityScope?: 'desktop' | 'headless';
   observe(options?: { ocr?: 'auto' | 'always' | 'off' }): Promise<Observation>;
   act(action: Action, observation: Observation, signal: AbortSignal): Promise<Observation | void>;
   screenshot(): Promise<Buffer>;
@@ -112,14 +131,14 @@ export class StaleObservationError extends Error {
 // A UI action can fail without ending the goal. The runner re-observes and lets Jev choose again.
 // Keep the message independent of Playwright's raw error, which can contain typed values.
 export class RecoverableActionError extends Error {
-  constructor(readonly reason: string, readonly guidance: string) { super(`Browser action failed: ${reason}.`); }
+  constructor(readonly reason: string, readonly guidance: string, readonly category = 'action_failed') { super(`Action failed: ${reason}.`); }
 }
 export class BlockedError extends Error {}
 export class TextHelperUnavailableError extends Error {
   constructor(message: string, readonly modelCalls = 1, readonly status?: number, readonly retryAfterMs?: number) { super(message); }
 }
 // description names the whole action for logs; label names only its target for a Choice option.
-export type Candidate = { action: Action | 'blocked' | 'done'; description: string; label?: string };
+export type Candidate = { action: Action | 'blocked' | 'done' | 'emergency_stop'; description: string; label?: string };
 export type Candidates = Record<string, Candidate>;
 export interface DecisionTrace {
   requestChars: number; inputTokens?: number; model?: string; attempts: number;
@@ -127,16 +146,23 @@ export interface DecisionTrace {
   used: Array<{ question: string; choice: string; confidence: number; top: Array<[string, number]> }>;
 }
 export interface Decision { choice: string; confidence: number; probability: number; latencyMs: number; modelCalls?: number; trace?: DecisionTrace }
-export interface DecisionContext { conditions: Array<{ condition: string; met: boolean }>; clipboard?: { hasImage: boolean; changedSinceStart: boolean } }
+export interface DecisionContext {
+  conditions: Array<{ condition: string; met: boolean }>;
+  clipboard?: { hasImage: boolean; changedSinceStart: boolean };
+  taskState?: { plan?: TaskPlan; artifacts: TaskArtifact[]; activeObjective?: string };
+  appGuides?: Array<{ id: string; name: string; version: number; instructions: string[] }>;
+}
 export interface Decider {
   factored?: boolean;
+  assessMilestone?(input: TaskInput, observation: Observation, step: PlanStepDraft, evidence: Array<{id: string; text: string}>, signal: AbortSignal, scope?: 'milestone' | 'whole_goal'): Promise<{complete: boolean; evidenceId?: string; evidenceIds?: string[]; confidence: number; modelCalls?: number}>;
   decide(input: TaskInput, observation: Observation, candidates: Candidates,
     history: string[], signal: AbortSignal, context?: DecisionContext): Promise<Decision>;
 }
 export interface TextHelper {
   availableAt?(): number;
-  compose(input: TaskInput, observation: Observation, field: ElementInfo, signal: AbortSignal): Promise<{ status: 'text' | 'need_input'; text: string; modelCalls?: number }>;
-  repair(input: TaskInput, observation: Observation, history: string[], signal: AbortSignal): Promise<string>;
+  plan?(input: TaskInput, observation: Observation, previous: TaskPlan | undefined, reason: string | undefined, signal: AbortSignal, context?: DecisionContext): Promise<{steps: PlanStepDraft[]; modelCalls?: number}>;
+  compose(input: TaskInput, observation: Observation, field: ElementInfo, signal: AbortSignal, context?: DecisionContext): Promise<{ status: 'text' | 'need_input'; text: string; candidates?: string[]; modelCalls?: number }>;
+  repair(input: TaskInput, observation: Observation, history: string[], signal: AbortSignal, context?: DecisionContext): Promise<string>;
 }
 const roleNames: Record<string, string> = { AXLink: 'link', AXImage: 'image', AXStaticText: 'text', AXMenuItem: 'menu item', AXMenuBarItem: 'menu bar item',
   AXPopUpButton: 'pop-up button', AXMenuButton: 'menu button', AXCell: 'cell', AXRow: 'row', AXGroup: 'group', AXList: 'list', AXSearchField: 'search field' };
@@ -170,13 +196,14 @@ export function verify(observation: Observation, conditions: Condition[]) {
     // The initial app catalog is not an observation of a target interface.
     return { condition, passed: passed && !(observation.kind === 'desktop' && !observation.targetId) };
   });
-  return { passed: checks.every(c => c.passed), checks };
+  return { passed: checks.length > 0 && checks.every(c => c.passed), checks };
 }
 
 // Keys name the operation and its observed target (click:e12, fill:e5:0), so every option refers to an
 // element in the same observation Jev receives.
 export function candidatesFor(observation: Observation, inputs: Record<string, string>, options: { factored?: boolean; canCompose?: boolean; canCopyText?: boolean } = {}): Candidates {
   const candidates: Candidates = {
+    emergency_stop: { action: 'emergency_stop', description: 'Stop task — use this if you think there is an emergency or it is unsafe to continue. Immediately stop all further actions and return control to the user.' },
     blocked: { action: 'blocked', description: 'Cannot proceed with the supplied values and available controls; return to the assistant.' },
     done: { action: 'done', description: 'The requested outcome is already visible. Code will independently verify it.' },
     wait: { action: { kind: 'wait' }, description: 'Wait briefly for an interface update that is still loading.' },
@@ -187,10 +214,10 @@ export function candidatesFor(observation: Observation, inputs: Record<string, s
     escape: { action: { kind: 'press', key: 'Escape' }, description: 'Press Escape to dismiss the active menu or dialog.' },
   };
   if (observation.kind === 'desktop' && !observation.targetId) {
-    for (const key of ['scroll_down', 'scroll_up', 'enter', 'tab', 'escape', 'wait']) delete candidates[key];
+    for (const key of ['scroll_down', 'scroll_up', 'enter', 'tab', 'escape']) delete candidates[key];
   }
   if (observation.ocrAvailable && !observation.ocr?.used)
-    candidates.scan_screen = { action: { kind: 'scan_screen' }, description: 'Read rendered text from a local screenshot when visible page content or controls are missing from the ordinary observation.' };
+    candidates.scan_screen = { action: { kind: 'scan_screen' }, description: 'Scan the screen with local OCR when a control is missing, its label is unclear, or repeated actions are not advancing the task. Exposes visible text as click targets; after clicking a label, inspect the revealed or focused field.' };
   const inBrowser = observation.kind === 'browser' || (observation.kind === 'desktop' && Boolean(observation.url));
   if (inBrowser && !observation.modal) {
     for (const tab of observation.tabs ?? []) if (tab.id !== observation.activeTabId)
@@ -211,6 +238,7 @@ export function candidatesFor(observation: Observation, inputs: Record<string, s
   }
   if (observation.modal) for (const key of ['scroll_down', 'scroll_up', 'enter', 'tab']) delete candidates[key];
   else if (observation.kind === 'macos' || (observation.kind === 'desktop' && observation.targetId && !observation.url)) {
+    candidates.wait_for_change = { action: { kind: 'wait_for_change' }, description: 'Wait up to 3 seconds for this app’s content or controls to update.' };
     for (const [key, verb] of [['n', 'create a new item'], ['o', 'open an item'], ['f', 'find text'], ['s', 'save the current document']] as const)
       candidates[`shortcut_${key}`] = { action: { kind: 'press', key, modifiers: ['Meta'] }, description: `Press Command-${key.toUpperCase()} to ${verb} in the focused app` };
     candidates.paste = { action: { kind: 'press', key: 'v', modifiers: ['Meta'] }, description: 'Press Command-V to paste the clipboard into the focused control' };

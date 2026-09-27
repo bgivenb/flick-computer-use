@@ -1,0 +1,70 @@
+{
+  "schemaVersion": 1,
+  "id": "macos-finder",
+  "name": "Finder on macOS",
+  "version": 1,
+  "match": {
+    "bundleIds": [
+      "com.apple.finder"
+    ]
+  },
+  "instructions": [
+    {
+      "id": "understand-location",
+      "text": "Finder lists files, folders, apps, and devices. Read the current folder and selected item before acting; list view exposes useful details such as kind and modification date.",
+      "status": "documented",
+      "provenance": {
+        "source": "builtin",
+        "reference": "https://support.apple.com/guide/mac-help/organize-your-files-in-the-finder-mchle9f0a1b2/mac"
+      }
+    },
+    {
+      "id": "preview-files",
+      "text": "View > Show Preview displays information and a preview for the selected file. This can help distinguish similarly named files before opening one.",
+      "status": "documented",
+      "provenance": {
+        "source": "builtin",
+        "reference": "https://support.apple.com/guide/mac-help/organize-your-files-in-the-finder-mchle9f0a1b2/mac"
+      }
+    },
+    {
+      "id": "new-folder",
+      "text": "File > New Folder creates a folder. Enter its intended name and verify that it appears in the intended location.",
+      "status": "documented",
+      "provenance": {
+        "source": "builtin",
+        "reference": "https://support.apple.com/guide/mac-help/organize-your-files-in-the-finder-mchle9f0a1b2/mac"
+      }
+    },
+    {
+      "id": "selection-and-open",
+      "text": "A selected file is not necessarily open. Use the offered open or double-click action when the task requires its contents, then verify the expected app or document appears.",
+      "status": "documented",
+      "provenance": {
+        "source": "builtin",
+        "evidence": "Project workflow guidance, not validated live in this app. Workflow guidance: distinguish selection from successful navigation using a fresh observation.",
+        "reference": "https://github.com/bgivenb/flick-computer-use/blob/main/src/core/runner.ts"
+      }
+    },
+    {
+      "id": "clipboard-kind",
+      "text": "Finder selections represent files and folders. A paste into a Finder window may copy files rather than insert text; use the observed filename editor for renaming and a text app for writing prose.",
+      "status": "documented",
+      "provenance": {
+        "source": "builtin",
+        "evidence": "Project workflow guidance, not validated live in this app. Flick clipboard actions must be chosen for the current control and clipboard content; proposed focus check.",
+        "reference": "https://github.com/bgivenb/flick-computer-use/blob/main/src/core/copy-text.ts"
+      }
+    },
+    {
+      "id": "verify-file-operation",
+      "text": "Check both item name and containing location after a copy, move, or rename. If an operation reports an error, inspect the destination before retrying; an existing result may already satisfy the task.",
+      "status": "documented",
+      "provenance": {
+        "source": "builtin",
+        "evidence": "Project workflow guidance, not validated live in this app. Proposed duplicate-avoidance and outcome check for file operations; no shell or filesystem shortcut required.",
+        "reference": "https://github.com/bgivenb/flick-computer-use/blob/main/src/core/runner.ts"
+      }
+    }
+  ]
+}

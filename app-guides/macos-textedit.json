@@ -1,0 +1,69 @@
+{
+  "schemaVersion": 1,
+  "id": "macos-textedit",
+  "name": "TextEdit on macOS",
+  "version": 1,
+  "match": {
+    "bundleIds": [
+      "com.apple.TextEdit"
+    ]
+  },
+  "instructions": [
+    {
+      "id": "new-document",
+      "text": "TextEdit may first display a file dialog. Choose New Document there, or File > New when a document window is open. Begin writing in the document body.",
+      "status": "documented",
+      "provenance": {
+        "source": "builtin",
+        "reference": "https://support.apple.com/guide/textedit/create-open-and-convert-documents-txtee6663a0e/mac"
+      }
+    },
+    {
+      "id": "open-document",
+      "text": "To open a document, use File > Open, select the intended file, and choose Open. Verify the document identity before changing its contents.",
+      "status": "documented",
+      "provenance": {
+        "source": "builtin",
+        "reference": "https://support.apple.com/guide/textedit/create-open-and-convert-documents-txtee6663a0e/mac"
+      }
+    },
+    {
+      "id": "save-document",
+      "text": "TextEdit saves edits automatically. File > Save lets you set the document name and location; verify both in the save dialog before confirming.",
+      "status": "documented",
+      "provenance": {
+        "source": "builtin",
+        "reference": "https://support.apple.com/guide/textedit/create-open-and-convert-documents-txtee6663a0e/mac"
+      }
+    },
+    {
+      "id": "document-format",
+      "text": "Use Format > Make Plain Text for text without styling, or Make Rich Text when formatting is needed. Converting to plain text removes formatting; choose the format required by the task.",
+      "status": "documented",
+      "provenance": {
+        "source": "builtin",
+        "reference": "https://support.apple.com/guide/textedit/create-open-and-convert-documents-txtee6663a0e/mac"
+      }
+    },
+    {
+      "id": "dialog-context",
+      "text": "While an Open or Save dialog is active, its filename and search fields are not the document body. Finish the dialog, then obtain a fresh observation before writing document content.",
+      "status": "documented",
+      "provenance": {
+        "source": "builtin",
+        "evidence": "Project workflow guidance, not validated live in this app. Proposed focus recovery for native file dialogs; no fixed Accessibility role or position is assumed.",
+        "reference": "https://github.com/bgivenb/flick-computer-use/blob/main/src/core/runner.ts"
+      }
+    },
+    {
+      "id": "verify-content",
+      "text": "Verify the document body contains the exact intended text. For cross-app reuse, remember or copy the observed body before switching; verify saved filename and location when saving is a goal.",
+      "status": "documented",
+      "provenance": {
+        "source": "builtin",
+        "evidence": "Project workflow guidance, not validated live in this app. Proposed outcome checks using Flick observations and exact-content memory.",
+        "reference": "https://github.com/bgivenb/flick-computer-use/blob/main/src/core/runner.ts"
+      }
+    }
+  ]
+}

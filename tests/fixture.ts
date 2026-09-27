@@ -35,6 +35,15 @@ export async function fixture(outboundUrl?: string) {
         x.fillStyle='#fff';x.font='bold 42px Arial';x.fillText('OPEN PAINTED PANEL',45,94);
         c.onclick=()=>document.getElementById('status').textContent='Canvas panel opened';</script>`);
     }
+    else if (request.url === '/late-composer') {
+      response.setHeader('Content-Type', 'text/html');
+      response.end(`<!doctype html><title>Busy inbox</title>
+        <div style="display:grid;grid-template-columns:repeat(20,40px)">${Array.from({length:150},(_,i)=>`<button>${i}</button>`).join('')}</div>
+        <section role="dialog" aria-label="New message">
+          <input role="combobox" aria-label="To recipients"><input aria-label="Subject">
+          <div contenteditable="true" role="textbox" aria-label="Message Body" style="height:50px"></div>
+        </section>`);
+    }
     else if (request.url === '/unlabeled-editor') {
       response.setHeader('Content-Type', 'text/html');
       response.end('<!doctype html><title>Online note editor</title><h1>Write a note</h1><div contenteditable="true" style="width:500px;height:200px;border:1px solid black">\n</div>');

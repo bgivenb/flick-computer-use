@@ -1,0 +1,71 @@
+{
+  "schemaVersion": 1,
+  "id": "linkedin",
+  "name": "LinkedIn posts and scheduling",
+  "version": 1,
+  "match": {
+    "hosts": [
+      "linkedin.com",
+      "www.linkedin.com"
+    ]
+  },
+  "instructions": [
+    {
+      "id": "open-composer",
+      "text": "Start a post opens the post composer. Enter the intended post in its writing field; scheduling controls belong to this composer.",
+      "status": "documented",
+      "provenance": {
+        "source": "builtin",
+        "reference": "https://www.linkedin.com/help/linkedin/answer/a1347212/schedule-posts?lang=en"
+      }
+    },
+    {
+      "id": "schedule-flow",
+      "text": "For an authorized scheduled post, use the clock control, enter the requested date and time, then Next. Inspect the displayed schedule before choosing Schedule. The device time zone affects the scheduled time.",
+      "status": "documented",
+      "provenance": {
+        "source": "builtin",
+        "reference": "https://www.linkedin.com/help/linkedin/answer/a1347212/schedule-posts?lang=en"
+      }
+    },
+    {
+      "id": "verify-queue",
+      "text": "View all scheduled posts is available from the scheduling dialog. After scheduling, open that list and inspect the matching post and schedule to verify the result.",
+      "status": "documented",
+      "provenance": {
+        "source": "builtin",
+        "reference": "https://www.linkedin.com/help/linkedin/answer/a1347212/schedule-posts?lang=en"
+      }
+    },
+    {
+      "id": "author-and-audience",
+      "text": "Check the composer’s displayed author and audience before publishing or scheduling. A Chrome profile and a signed-in LinkedIn identity are separate pieces of evidence.",
+      "status": "documented",
+      "provenance": {
+        "source": "builtin",
+        "evidence": "Project workflow guidance, not validated live in this app. Proposed identity verification at the point of external publication.",
+        "reference": "https://github.com/bgivenb/flick-computer-use/blob/main/src/core/runner.ts"
+      }
+    },
+    {
+      "id": "exact-draft",
+      "text": "Preserve exact task wording and links when supplied. Use compose only for text that still needs writing; compare the completed editor against the intended post before the authorized final action.",
+      "status": "documented",
+      "provenance": {
+        "source": "builtin",
+        "evidence": "Project workflow guidance, not validated live in this app. Flick exact-content memory and task-scope guidance; app instructions do not authorize publication.",
+        "reference": "https://github.com/bgivenb/flick-computer-use/blob/main/src/providers/text-helper.ts"
+      }
+    },
+    {
+      "id": "uncertain-submit",
+      "text": "If the final scheduling action fails or times out, inspect the scheduled queue before trying again. A matching queued item is evidence the first action succeeded; avoid creating duplicates.",
+      "status": "documented",
+      "provenance": {
+        "source": "builtin",
+        "evidence": "Project workflow guidance, not validated live in this app. Proposed recovery check for uncertain submission outcomes; no live LinkedIn test is claimed.",
+        "reference": "https://github.com/bgivenb/flick-computer-use/blob/main/src/core/runner.ts"
+      }
+    }
+  ]
+}

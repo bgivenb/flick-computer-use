@@ -1,0 +1,73 @@
+{
+  "schemaVersion": 1,
+  "id": "gmail",
+  "name": "Gmail composing, recipients and drafts",
+  "version": 3,
+  "match": {
+    "hosts": [
+      "mail.google.com"
+    ]
+  },
+  "instructions": [
+    {
+      "id": "recipient-first",
+      "text": "Immediately after opening Compose, enter/paste the recipient email into the already-focused To recipients input. Do this FIRST, before pressing Tab or filling Subject or Message Body. Commit the address while recipient focus is still active and confirm its chip; only then move to Subject and Message Body. If the observation has not exposed recipient focus yet, wait/reobserve or use the composer-size toggle to restore it before entering the address.",
+      "status": "documented",
+      "provenance": {
+        "source": "builtin",
+        "reference": "https://support.google.com/mail/answer/2819488?hl=en",
+        "evidence": "User-observed Gmail behavior: Compose initially focuses recipients; switching composer size restores recipient focus. Flick live runs corroborated expansion exposing and focusing To recipients. Full end-to-end recipient commitment remains to be tested."
+      }
+    },
+    {
+      "id": "missing-recipient",
+      "text": "If recipient focus is lost or To recipients is missing, toggle the observed Full screen composer control. Expanding the draft restores recipient focus; returning to small mode can do the same. Inspect the new focused control, fill To recipients, commit the address, and confirm its chip. Use this toggle to recover instead of cycling Tab through other fields. Keep the same draft and preserve its subject/body.",
+      "status": "documented",
+      "provenance": {
+        "source": "builtin",
+        "reference": "https://support.google.com/mail/answer/90559?hl=en",
+        "evidence": "User-observed Gmail behavior: Compose initially focuses recipients; switching composer size restores recipient focus. Flick live runs corroborated expansion exposing and focusing To recipients. Full end-to-end recipient commitment remains to be tested."
+      }
+    },
+    {
+      "id": "sender-and-draft",
+      "text": "Confirm the requested Gmail account from the account menu or compose From identity; the Chrome profile alone is not the sender. Stay in the intended composer when several drafts are open. If an attempt already created a draft, find that draft instead of pressing Compose again and creating duplicates.",
+      "status": "documented",
+      "provenance": {
+        "source": "builtin",
+        "reference": "https://support.google.com/mail/answer/2819488?hl=en",
+        "evidence": "Gmail documentation plus project task guidance. Recovery tactics are proposed from observed recipient/body confusion; successful live recovery has not yet been validated."
+      }
+    },
+    {
+      "id": "body-and-clipboard",
+      "text": "Once the recipient and subject are set, put the retained message text into Message Body. For a requested clipboard paste, focus Message Body then use the paste shortcut. Read the body back and confirm the intended source text remains there. If an address accidentally replaced it, restore the retained body, then handle the missing recipient field separately.",
+      "status": "documented",
+      "provenance": {
+        "source": "builtin",
+        "reference": "https://support.google.com/mail/answer/90559?hl=en",
+        "evidence": "Gmail documentation plus project task guidance. Recovery tactics are proposed from observed recipient/body confusion; successful live recovery has not yet been validated."
+      }
+    },
+    {
+      "id": "draft-endpoint",
+      "text": "Gmail saves drafts automatically. For an unsent-draft task, leave the intended recipient, subject and body in the composer and wait for its saved status, or inspect the matching entry in Drafts. Minimize, close and discard are different controls. Do not click Send or use the send shortcut for a draft-only goal.",
+      "status": "documented",
+      "provenance": {
+        "source": "builtin",
+        "reference": "https://support.google.com/mail/answer/90559?hl=en",
+        "evidence": "Gmail documentation plus project task guidance. Recovery tactics are proposed from observed recipient/body confusion; successful live recovery has not yet been validated."
+      }
+    },
+    {
+      "id": "authorized-send",
+      "text": "Only send when the user requested it. Inspect the recipient, From identity, subject and body before Send. Afterward look for Message sent or the matching message in Sent. If a send attempt times out, inspect Sent before repeating it; a draft or a successful field write alone does not establish sending.",
+      "status": "documented",
+      "provenance": {
+        "source": "builtin",
+        "reference": "https://support.google.com/mail/answer/2819488?hl=en",
+        "evidence": "Gmail documentation plus project task guidance. Recovery tactics are proposed from observed recipient/body confusion; successful live recovery has not yet been validated."
+      }
+    }
+  ]
+}

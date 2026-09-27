@@ -1,0 +1,70 @@
+{
+  "schemaVersion": 1,
+  "id": "macos-calendar",
+  "name": "Calendar on macOS",
+  "version": 1,
+  "match": {
+    "bundleIds": [
+      "com.apple.iCal"
+    ]
+  },
+  "instructions": [
+    {
+      "id": "quick-event",
+      "text": "Create Quick Event accepts an event description and Return creates it. Open the created event to inspect the interpreted details.",
+      "status": "documented",
+      "provenance": {
+        "source": "builtin",
+        "reference": "https://support.apple.com/guide/calendar/get-started-iclc0d84c7fa/mac"
+      }
+    },
+    {
+      "id": "event-details",
+      "text": "Double-click an event to view details. Its detail editor supports notes, a URL, attachments, and time-related settings; choose the observed field matching the task.",
+      "status": "documented",
+      "provenance": {
+        "source": "builtin",
+        "reference": "https://support.apple.com/guide/calendar/get-started-iclc0d84c7fa/mac"
+      }
+    },
+    {
+      "id": "alerts",
+      "text": "To set an alert, open the event, select its time, then choose an option from the Alert menu.",
+      "status": "documented",
+      "provenance": {
+        "source": "builtin",
+        "reference": "https://support.apple.com/guide/calendar/get-started-iclc0d84c7fa/mac"
+      }
+    },
+    {
+      "id": "verify-schedule",
+      "text": "Read back the event title, calendar, start and end date/time, and all-day or time-zone settings relevant to the task. Natural-language entry can resolve a date differently than intended.",
+      "status": "documented",
+      "provenance": {
+        "source": "builtin",
+        "evidence": "Project workflow guidance, not validated live in this app. Proposed check of structured event details after quick entry; not a claim of natural-language parser reliability.",
+        "reference": "https://github.com/bgivenb/flick-computer-use/blob/main/src/core/runner.ts"
+      }
+    },
+    {
+      "id": "correct-existing-event",
+      "text": "When a created event has incorrect details, edit that event and recheck it. Avoid creating another event merely because the calendar view changed or the detail panel closed.",
+      "status": "documented",
+      "provenance": {
+        "source": "builtin",
+        "evidence": "Project workflow guidance, not validated live in this app. Proposed recovery rule to prevent duplicate events after uncertain outcomes.",
+        "reference": "https://github.com/bgivenb/flick-computer-use/blob/main/src/core/runner.ts"
+      }
+    },
+    {
+      "id": "invite-scope",
+      "text": "Attendees turn an event into a communication workflow. Match any selected invitees to the task, and verify the final event after the authorized save or invitation action.",
+      "status": "documented",
+      "provenance": {
+        "source": "builtin",
+        "evidence": "Project workflow guidance, not validated live in this app. Task-scope and result check for calendar invitations; app instructions do not themselves authorize inviting anyone.",
+        "reference": "https://github.com/bgivenb/flick-computer-use/blob/main/src/core/runner.ts"
+      }
+    }
+  ]
+}

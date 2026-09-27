@@ -35,7 +35,6 @@ export const snapshotScript = String.raw`(() => {
   const text = [];
   let active = document.activeElement;
   while (active?.shadowRoot?.activeElement) active = active.shadowRoot.activeElement;
-  let count = 0;
   state.nodes.clear();
   for (const node of all) {
     if (!visible(node)) continue;
@@ -46,8 +45,8 @@ export const snapshotScript = String.raw`(() => {
     const isSecret = node.type === 'password' || node.getAttribute('autocomplete') === 'one-time-code';
     const canClick = node.matches('button,a[href],summary,input[type=checkbox],input[type=radio],input[type=submit],input[type=button],input[type=reset]') || ['button','link','checkbox','radio','tab','menuitem','option','switch','combobox'].includes(role);
     if (!role && !isEditable && !canClick) continue;
-    count++;
-    if (elements.length >= 120) continue;
+    // Keep every visible control here. focusView budgets the model-facing choices
+    // after ranking relevance; truncating DOM order here loses late-mounted dialogs.
     let id = state.ids.get(node);
     if (!id) { id = 'e' + state.next++; state.ids.set(node, id); }
     state.nodes.set(id, node);
@@ -78,7 +77,7 @@ export const snapshotScript = String.raw`(() => {
   }
   const focus = active ? [state.ids.get(active) || '', active.tagName, active.getAttribute('role') || ''] : [];
   const scrolling = document.scrollingElement;
-  return { epoch: state.epoch, title: document.title, text: text.join('\n').slice(0, 16000), elements, truncated: count > 120 || text.join('\n').length > 16000,
+  return { epoch: state.epoch, title: document.title, text: text.join('\n').slice(0, 16000), elements, truncated: text.join('\n').length > 16000,
     loadState: document.readyState, pendingImages: all.filter(node => node.tagName === 'IMG' && !node.complete).length,
     scroll: [Math.round(scrollX), Math.round(scrollY), Math.max(0, (scrolling?.scrollHeight ?? 0) - innerHeight)], focus };
 })()`;

@@ -1,5 +1,7 @@
+import { setTimeout as delay } from 'node:timers/promises';
 import { randomUUID, createHash } from 'node:crypto';
 import { z } from 'zod';
+import { unchangedCopyText } from '../core/copy-text.js';
 import { BrowserDriver, type BrowserOptions } from './browser.js';
 import { MacOSDriver } from './macos.js';
 import { StaleObservationError, type Action, type Driver, type Observation } from '../core/types.js';
@@ -15,7 +17,7 @@ export type DesktopTarget = z.infer<typeof targetSchema>;
 type Target = DesktopTarget & { id: string; name: string };
 type Fact = { key: string; value: string; source: string };
 export interface DesktopFactory {
-  native(): Driver & { switchApp(bundleId: string): Promise<void> };
+  native(): Driver & { switchApp(bundleId: string,signal?:AbortSignal): Promise<void> };
   browser(options: BrowserOptions): Promise<Driver>;
 }
 
@@ -23,6 +25,7 @@ export class DesktopDriver implements Driver {
   readonly id = randomUUID();
   readonly kind = 'desktop' as const;
   readonly label = 'Autonomous desktop';
+  get userActivityScope(): 'desktop' | 'headless' { return this.targets.some(t=>t.kind==='macos' || t.connection==='existing-chrome' || !t.headless) ? 'desktop' : 'headless'; }
   readonly targets: Target[];
   private native?: ReturnType<DesktopFactory['native']>;
   private browsers = new Map<string, Driver>();
@@ -62,12 +65,18 @@ export class DesktopDriver implements Driver {
       const target = this.targets.find(t => t.id === action.targetId);
       if (!target || !observation.targets?.some(t => t.id === target.id)) throw new Error('App switching needs an observed target.');
       if (target.kind === 'macos') {
-        await this.native!.switchApp(target.bundleId);
+        try { await this.native!.switchApp(target.bundleId,signal); }
+        catch (error) {
+          // Activation can precede cancellation. The old target association is
+          // no longer reliable; Continue must choose an app again.
+          this.active = undefined; this.observed.clear();
+          throw error;
+        }
         this.active = { target, driver: this.native! };
       } else {
         let driver = this.browsers.get(target.id);
         if (!driver) {
-          driver = await this.factory.browser({ ...target, profile: target.profile ?? `desktop-${this.id.slice(0, 8)}-${this.targets.indexOf(target)}` });
+          driver = await this.factory.browser({ ...target, profile: target.profile ?? `desktop-${this.id.slice(0, 8)}-${this.targets.indexOf(target)}`, signal });
           this.browsers.set(target.id, driver);
         }
         signal.throwIfAborted();
@@ -77,6 +86,7 @@ export class DesktopDriver implements Driver {
       signal.throwIfAborted();
       return;
     }
+    if (action.kind === 'wait' && !this.active) { await delay(200,undefined,{signal}); return; }
     const raw = this.observed.get(observation.id);
     if (!this.active || !raw) throw new StaleObservationError();
     if (action.kind === 'remember') {
@@ -84,7 +94,7 @@ export class DesktopDriver implements Driver {
       if (!element?.value || element.value === '[redacted]') throw new Error('Only observed, readable text can be remembered.');
       const fresh = await this.active.driver.observe();
       signal.throwIfAborted();
-      const current = action.elementId === 'read:visible-text' ? fresh.text.slice(0, 10000) : fresh.elements.find(e => e.id === element.id && e.name === element.name && e.role === element.role)?.value;
+      const current = action.elementId === 'read:visible-text' ? fresh.text.slice(0, 10000) : unchangedCopyText(element, fresh);
       if (fresh.title !== raw.title || current !== element.value) throw new StaleObservationError();
       if (!this.facts.some(f => f.value === current)) {
         if (this.facts.length >= 12) throw new Error('Task memory is full. Return the collected facts before starting another task.');

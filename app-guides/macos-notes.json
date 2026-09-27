@@ -1,0 +1,71 @@
+{
+  "schemaVersion": 1,
+  "id": "macos-notes",
+  "name": "Notes on macOS",
+  "version": 1,
+  "match": {
+    "bundleIds": [
+      "com.apple.Notes"
+    ]
+  },
+  "instructions": [
+    {
+      "id": "create-note",
+      "text": "To create a note, select its intended folder, then choose New Note. The first line becomes its title; Notes saves edits automatically.",
+      "status": "documented",
+      "provenance": {
+        "source": "builtin",
+        "reference": "https://support.apple.com/guide/notes/write-and-format-notes-not9474646a9/mac"
+      }
+    },
+    {
+      "id": "edit-note",
+      "text": "To edit an existing note, open or search for it first. The note list selects documents; the note body is the text editor.",
+      "status": "documented",
+      "provenance": {
+        "source": "builtin",
+        "reference": "https://support.apple.com/guide/notes/write-and-format-notes-not9474646a9/mac"
+      }
+    },
+    {
+      "id": "write-body",
+      "text": "After creating or opening the note, select its editable body. Reuse exact supplied or remembered text; use compose when new prose is needed. Verify the body contains the intended content.",
+      "status": "documented",
+      "provenance": {
+        "source": "builtin",
+        "evidence": "Project workflow guidance, not validated live in this app. Workflow guidance from the distinction between document selection and editing; not yet live-tested.",
+        "reference": "https://github.com/bgivenb/flick-computer-use/blob/main/src/providers/text-helper.ts"
+      }
+    },
+    {
+      "id": "keep-source",
+      "text": "For a transfer to another app, remember or copy the completed note body before switching. Keep that exact text for the destination so the writing helper does not produce a different version.",
+      "status": "documented",
+      "provenance": {
+        "source": "builtin",
+        "evidence": "Project workflow guidance, not validated live in this app. Flick has remember, copy_text, fill, and compose actions; this is a proposed cross-app workflow.",
+        "reference": "https://github.com/bgivenb/flick-computer-use/blob/main/src/core/copy-text.ts"
+      }
+    },
+    {
+      "id": "check-focus",
+      "text": "If typing changes search text or a note title instead of the body, observe again and select the body. If the body is absent, inspect the current window or use the available screen scan.",
+      "status": "documented",
+      "provenance": {
+        "source": "builtin",
+        "evidence": "Project workflow guidance, not validated live in this app. Recovery guidance for incomplete Accessibility observations; not a fixed selector or screen position.",
+        "reference": "https://github.com/bgivenb/flick-computer-use/blob/main/src/core/runner.ts"
+      }
+    },
+    {
+      "id": "verify-note",
+      "text": "Treat the note as written only when a fresh observation shows the expected title and body. Switching to Notes alone does not complete the writing milestone.",
+      "status": "documented",
+      "provenance": {
+        "source": "builtin",
+        "evidence": "Project workflow guidance, not validated live in this app. Proposed outcome check; an app activation is not evidence that content was written.",
+        "reference": "https://github.com/bgivenb/flick-computer-use/blob/main/src/core/runner.ts"
+      }
+    }
+  ]
+}

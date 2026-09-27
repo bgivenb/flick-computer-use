@@ -1,0 +1,73 @@
+{
+  "schemaVersion": 1,
+  "id": "web-forms",
+  "name": "Web forms and rich text editors",
+  "version": 1,
+  "match": {
+    "roles": [
+      "textbox",
+      "searchbox",
+      "combobox",
+      "spinbutton"
+    ]
+  },
+  "instructions": [
+    {
+      "id": "field-constraints",
+      "text": "Check the field’s label, type, required flag, and displayed validation message. Use the expected format and allowed range; a value rejected by validation needs correction before submission.",
+      "status": "documented",
+      "provenance": {
+        "source": "builtin",
+        "reference": "https://developer.mozilla.org/en-US/docs/Learn_web_development/Extensions/Forms/Form_validation"
+      }
+    },
+    {
+      "id": "combobox-selection",
+      "text": "A combobox may accept typed text or require choosing an option from a popup. After typing, inspect suggestions and select the matching observed option if the field still needs a committed selection.",
+      "status": "documented",
+      "provenance": {
+        "source": "builtin",
+        "reference": "https://developer.mozilla.org/en-US/docs/Web/Accessibility/ARIA/Reference/Roles/combobox_role"
+      }
+    },
+    {
+      "id": "editable-region",
+      "text": "Rich text areas can be editable page regions rather than input elements. Use the observed writable control and read its text back after filling or pasting; formatting may be retained by rich editors.",
+      "status": "documented",
+      "provenance": {
+        "source": "builtin",
+        "reference": "https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Global_attributes/contenteditable"
+      }
+    },
+    {
+      "id": "field-ownership",
+      "text": "Use surrounding section labels to associate each field with the correct person or record. Fill one record’s matching fields before moving to another; identical field labels can belong to different sections.",
+      "status": "documented",
+      "provenance": {
+        "source": "builtin",
+        "evidence": "Project workflow guidance, not validated live in this app. Proposed context check for repeated form sections; use observed relationships instead of guessed selectors.",
+        "reference": "https://github.com/bgivenb/flick-computer-use/blob/main/src/core/runner.ts"
+      }
+    },
+    {
+      "id": "writer-handoff",
+      "text": "Choose compose for a selected field when its text needs drafting. Provide the user goal, field context, and retained exact values to the helper; reuse known content instead of inventing a new version.",
+      "status": "documented",
+      "provenance": {
+        "source": "builtin",
+        "evidence": "Project workflow guidance, not validated live in this app. Flick Jev/text-helper role separation: Jev selects the field and the helper writes its text.",
+        "reference": "https://github.com/bgivenb/flick-computer-use/blob/main/src/providers/text-helper.ts"
+      }
+    },
+    {
+      "id": "verify-save",
+      "text": "After a save or submit, check the resulting record or confirmation and any remaining validation errors. Wait for the relevant change when loading continues; inspect the result before retrying an uncertain submission.",
+      "status": "documented",
+      "provenance": {
+        "source": "builtin",
+        "evidence": "Project workflow guidance, not validated live in this app. Proposed outcome check combining observed validation and fresh page state.",
+        "reference": "https://github.com/bgivenb/flick-computer-use/blob/main/src/core/runner.ts"
+      }
+    }
+  ]
+}

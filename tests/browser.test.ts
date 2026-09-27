@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
+import { focusView } from '../src/core/scene.js';
 import { fixture } from './fixture.js';
 import { BrowserDriver } from '../src/drivers/browser.js';
 import { StaleObservationError, candidatesFor } from '../src/core/types.js';
@@ -210,5 +211,25 @@ test('real browser: jump to bottom and top exposes page position', async t => {
     assert.ok(candidatesFor(observation, {}).scroll_top);
     observation = (await driver.act({ kind: 'scroll_top' }, observation, signal))!;
     assert.equal(observation.scroll?.canScrollUp, false);
+  } finally { await driver.close(); }
+});
+
+test('real browser: late-mounted composer fields survive a busy inbox and can be filled', async t => {
+  const web = await fixture(); const dir = await mkdtemp(join(tmpdir(), 'flick-composer-test-'));
+  t.after(async () => { await web.close(); await rm(dir, { recursive: true, force: true }); });
+  const driver = await BrowserDriver.open({ url: web.url + '/late-composer', headless: true }, dir);
+  try {
+    const observation = await driver.observe();
+    assert.ok(observation.elements.length > 120);
+    const focused = focusView(observation, 'Create an email draft with recipient, subject and body');
+    const recipient = focused.elements.find(e => e.name === 'To recipients');
+    assert.ok(recipient, 'recipient must survive the default model-facing budget');
+    assert.ok(focused.elements.some(e => e.name === 'Subject'));
+    assert.ok(focused.elements.some(e => e.name === 'Message Body'));
+    const candidates = candidatesFor(focused, {recipient:'demo@example.com'});
+    assert.ok(Object.values(candidates).some(c => typeof c.action !== 'string' && c.action.kind === 'fill' && c.action.elementId === recipient.id));
+    assert.ok(focusView(observation, '', 240).elements.length > 120, 'inspect more must expose more controls');
+    await driver.act({kind:'fill',elementId:recipient.id,value:'demo@example.com'}, observation, new AbortController().signal);
+    assert.equal((await driver.observe()).elements.find(e => e.id === recipient.id)?.value, 'demo@example.com');
   } finally { await driver.close(); }
 });

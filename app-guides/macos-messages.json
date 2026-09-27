@@ -1,0 +1,70 @@
+{
+  "schemaVersion": 1,
+  "id": "macos-messages",
+  "name": "Messages on macOS",
+  "version": 1,
+  "match": {
+    "bundleIds": [
+      "com.apple.MobileSMS"
+    ]
+  },
+  "instructions": [
+    {
+      "id": "choose-conversation",
+      "text": "Open an existing conversation from the sidebar, or use Compose and enter the intended contact name, phone number, or Apple Account in To. Contact details are available from the contact icon.",
+      "status": "documented",
+      "provenance": {
+        "source": "builtin",
+        "reference": "https://support.apple.com/guide/messages/send-messages-icht35827/mac"
+      }
+    },
+    {
+      "id": "recipient-versus-body",
+      "text": "The To field chooses recipients. The message editor is at the bottom of the conversation. Enter or paste the message into that editor after selecting the intended recipient.",
+      "status": "documented",
+      "provenance": {
+        "source": "builtin",
+        "reference": "https://support.apple.com/guide/messages/send-messages-icht35827/mac"
+      }
+    },
+    {
+      "id": "return-sends",
+      "text": "Return sends the composed message. Use the task’s requested endpoint: retain the draft for an unsent task; send when sending is authorized and the recipient and content have been verified.",
+      "status": "documented",
+      "provenance": {
+        "source": "builtin",
+        "reference": "https://support.apple.com/guide/messages/send-messages-icht35827/mac"
+      }
+    },
+    {
+      "id": "verify-recipient",
+      "text": "Check the selected conversation’s full name and available phone number or email against the task. Inspect contact details for ambiguous names; a matching first name alone may identify several people.",
+      "status": "documented",
+      "provenance": {
+        "source": "builtin",
+        "evidence": "Project workflow guidance, not validated live in this app. Recipient verification workflow; documented contact details provide evidence but name resolution must use the current UI.",
+        "reference": "https://github.com/bgivenb/flick-computer-use/blob/main/src/core/runner.ts"
+      }
+    },
+    {
+      "id": "reuse-message",
+      "text": "If the message was written in another app, fill or paste the same remembered text. Read the composer back before sending; do not ask compose to regenerate content already completed.",
+      "status": "documented",
+      "provenance": {
+        "source": "builtin",
+        "evidence": "Project workflow guidance, not validated live in this app. Flick supports exact remembered values; prevents divergence in cross-app writing tasks.",
+        "reference": "https://github.com/bgivenb/flick-computer-use/blob/main/src/providers/text-helper.ts"
+      }
+    },
+    {
+      "id": "verify-send",
+      "text": "After a send, inspect the conversation for a new outgoing message matching the text. If the action times out, inspect before retrying to avoid duplicates. A cleared composer alone is insufficient evidence.",
+      "status": "documented",
+      "provenance": {
+        "source": "builtin",
+        "evidence": "Project workflow guidance, not validated live in this app. Proposed send-result check; no live messaging test is claimed.",
+        "reference": "https://github.com/bgivenb/flick-computer-use/blob/main/src/core/runner.ts"
+      }
+    }
+  ]
+}

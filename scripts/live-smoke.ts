@@ -28,6 +28,7 @@ try {
   const saved = await fetch(web.url + '/state').then(r => r.json());
   const report = { testedAt: new Date().toISOString(), scenario: `Local browser export-settings form through stdio MCP and live Jev (${existingChrome ? 'existing Chrome profile' : 'dedicated profile'})`,
     status: result.status, reason: result.reason, steps: result.steps, metrics: result.metrics, events: result.events,
+    plan: result.plan, history: result.history,
     independentlyVerified: JSON.stringify(saved) === JSON.stringify({ email: 'demo@example.com', format: 'csv', headers: true }) };
   console.log(JSON.stringify(report, null, 2));
   await mkdir(config.localDir, { recursive: true });

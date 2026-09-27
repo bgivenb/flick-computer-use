@@ -95,7 +95,7 @@ test('an unlabeled creative editor drafts requested writing after an unnecessary
   const mock: typeof fetch = async (_url, init) => {
     calls++;
     const body = JSON.parse(String(init?.body));
-    assert.match(body.messages[0].content, /Your only job is to write the text/);
+    assert.match(body.messages[0].content, /propose candidate text for Jev/);
     const state = JSON.parse(body.messages[1].content);
     assert.match(state.instruction, calls === 1 ? /creative text/ : /no separate exact value is needed/);
     return new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify(calls === 1

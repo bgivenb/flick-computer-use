@@ -8,4 +8,6 @@ const result = spawnSync('swiftc', ['-O', `${root}native/MacHelper.swift`, '-o',
 if (result.error) console.error('Install Xcode Command Line Tools to build the native helper.');
 if (result.status !== 0) process.exit(result.status ?? 1);
 const ocr = spawnSync('swiftc', ['-O', `${root}native/OCRImage.swift`, '-o', `${root}.local/bin/flick-ocr-image`, '-framework', 'Vision', '-framework', 'ImageIO'], { stdio: 'inherit' });
-process.exit(ocr.status ?? 1);
+if (ocr.status !== 0) process.exit(ocr.status ?? 1);
+const activity = spawnSync('swiftc', ['-O', `${root}native/UserActivity.swift`, '-o', `${root}.local/bin/flick-user-activity`, '-framework', 'CoreGraphics'], { stdio: 'inherit' });
+process.exit(activity.status ?? 1);
